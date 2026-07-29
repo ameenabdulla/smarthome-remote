@@ -42,8 +42,8 @@ static const uint8_t IR_SENSOR_PIN   = 34;
 // Tank Config
 float tankDepthCm  = 100.0f;
 float sensorOffset = 5.0f;
-float autoPumpOn   = 20.0f;
-float autoPumpOff  = 90.0f;
+float autoPumpOn   = 20.0f; // ON when <= 20%
+float autoPumpOff  = 90.0f; // OFF when >= 90%
 
 // States
 bool lightStates[5]   = {false, false, false, false, false};
@@ -217,6 +217,7 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
           String m = doc["mode"].as<String>();
           pumpAutoMode = (m.equalsIgnoreCase("AUTO") || m.equalsIgnoreCase("AUTOMATIC"));
           prefs.putBool("pumpAuto", pumpAutoMode);
+          Serial.printf("[WS] Mode set to %s (Saved to NVS)\n", pumpAutoMode ? "AUTO" : "MANUAL");
         }
         if (doc.containsKey("on") && !pumpAutoMode) {
           pumpState = doc["on"].as<bool>();
@@ -225,6 +226,14 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
           pumpState = doc["pumpOn"].as<bool>();
           digitalWrite(RELAY_PUMP, pumpState ? LOW : HIGH);
         }
+        sendState();
+      }
+      else if (typeStr == "settings" || typeStr == "config") {
+        if (doc.containsKey("lowThreshold"))  autoPumpOn   = doc["lowThreshold"].as<float>();
+        if (doc.containsKey("highThreshold")) autoPumpOff  = doc["highThreshold"].as<float>();
+        if (doc.containsKey("tankDepth"))     tankDepthCm  = doc["tankDepth"].as<float>();
+        if (doc.containsKey("sensorOffset"))  sensorOffset = doc["sensorOffset"].as<float>();
+        Serial.printf("[Settings] Low=%.1f%% High=%.1f%% Depth=%.1fcm Offset=%.1fcm\n", autoPumpOn, autoPumpOff, tankDepthCm, sensorOffset);
         sendState();
       }
       break;
@@ -295,15 +304,22 @@ void loop() {
     lastSensorRead = millis();
     readSensors();
 
+    // ── Auto Pump Trigger Logic ──
     if (pumpAutoMode) {
-      if (waterPercentage <= autoPumpOn && !pumpState) {
-        pumpState = true;
-        digitalWrite(RELAY_PUMP, LOW);
-        sendState();
-      } else if (waterPercentage >= autoPumpOff && pumpState) {
-        pumpState = false;
-        digitalWrite(RELAY_PUMP, HIGH);
-        sendState();
+      if (waterPercentage <= autoPumpOn) {
+        if (!pumpState) {
+          pumpState = true;
+          digitalWrite(RELAY_PUMP, LOW);  // Active LOW = Relay ON
+          Serial.printf("[AUTO PUMP] ON (Water %.1f%% <= %.1f%%)\n", waterPercentage, autoPumpOn);
+          sendState();
+        }
+      } else if (waterPercentage >= autoPumpOff) {
+        if (pumpState) {
+          pumpState = false;
+          digitalWrite(RELAY_PUMP, HIGH); // Active LOW = Relay OFF
+          Serial.printf("[AUTO PUMP] OFF (Water %.1f%% >= %.1f%%)\n", waterPercentage, autoPumpOff);
+          sendState();
+        }
       }
     }
 
