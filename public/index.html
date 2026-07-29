@@ -379,39 +379,27 @@
 
           <!-- RIGHT COLUMN: Pump Control + Graph -->
           <div class="wm-col-controls">
-            <!-- Pump Control -->
+            <!-- Automatic Pump Control -->
             <div class="wm-pump-card glass-card scroll-reveal">
               <div class="wm-pump-header">
                 <div class="wm-pump-title-row">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                   <div>
-                    <h3>Pump Control</h3>
-                    <span class="wm-pump-mode-label" id="pump-mode-label">Mode: AUTO</span>
+                    <h3>Automatic Pump Control</h3>
+                    <span class="wm-pump-mode-label" id="pump-mode-label">Mode: AUTOMATIC</span>
                   </div>
                 </div>
               </div>
-              <div class="wm-pump-mode-tabs">
-                <button id="pump-auto-btn" class="wm-pump-tab active" data-mode="auto">AUTO</button>
-                <button id="pump-manual-btn" class="wm-pump-tab" data-mode="manual">MANUAL</button>
-              </div>
-              <div class="wm-pump-status-row">
+              <div class="wm-pump-status-row" style="margin-top: 10px;">
                 <div class="wm-pump-motor-info">
-                  <span class="wm-pump-motor-label">Motor Pump</span>
+                  <span class="wm-pump-motor-label">Motor Pump Status</span>
                   <span class="wm-pump-motor-state" id="pump-status-text">OFF</span>
                 </div>
                 <div class="wm-pump-toggle-area">
                   <span class="pump-dot" id="pump-dot"></span>
-                  <div class="pump-status-pill" id="pump-status-pill" style="display:none"></div>
-                  <span id="pump-mini-status" style="display:none">OFF</span>
                 </div>
               </div>
-              <div id="pump-manual-controls" class="wm-pump-manual" style="display:none;">
-                <button id="pump-power-btn" class="wm-pump-power-btn off">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
-                  <span>TURN ON</span>
-                </button>
-              </div>
-              <p class="wm-pump-hint">Pump is controlled automatically based on thresholds</p>
+              <p class="wm-pump-hint" style="display:block; margin-top:12px; color:var(--accent-cyan);">⚡ AUTOMATIC SYSTEM (Low ≤ 20% → ON, High ≥ 90% → OFF)</p>
             </div>
 
             <!-- Level History Graph -->

@@ -1,6 +1,6 @@
 /*
  * ======================================================================================
- * NEXUS SMART HOME REMOTE FIRMWARE — ALWAYS BOOT INTO AUTOMATIC PUMP MODE
+ * NEXUS SMART HOME REMOTE FIRMWARE — 100% PURE AUTOMATIC PUMP SYSTEM
  * ESP32 Dev Module connected to WiFi & Render.com WebSocket Server
  * Hardware Map:
  *   - Lights (5 Relays): GPIO 13, 14, 27, 26, 33 (Active-LOW)
@@ -45,10 +45,10 @@ float sensorOffset = 5.0f;
 float autoPumpOn   = 20.0f; // ON when <= 20%
 float autoPumpOff  = 90.0f; // OFF when >= 90%
 
-// States — ALWAYS DEFAULT TO AUTO MODE = TRUE ON BOOT/POWER ON!
+// States — PURE AUTOMATIC PUMP SYSTEM
 bool lightStates[5]   = {false, false, false, false, false};
 bool pumpState        = false;
-bool pumpAutoMode     = true; // ALWAYS AUTOMATIC ON POWER ON
+const bool pumpAutoMode = true; // 100% PURE AUTOMATIC MODE
 int  gateServoAngle   = 0;
 int  auxServoAngle    = 0;
 
@@ -113,7 +113,7 @@ void sendState() {
 
   JsonObject pump = doc["pump"].to<JsonObject>();
   pump["on"]   = pumpState;
-  pump["mode"] = pumpAutoMode ? "AUTO" : "MANUAL";
+  pump["mode"] = "AUTOMATIC"; // Always AUTOMATIC
 
   JsonObject water = doc["water"].to<JsonObject>();
   water["distance"] = waterDistanceCm;
@@ -142,7 +142,7 @@ void updateLCD() {
   lcd.print(waterPercentage, 1);
   lcd.print("%     ");
   lcd.setCursor(0, 1);
-  lcd.print(pumpAutoMode ? "AUTO " : "MANU ");
+  lcd.print("AUTO ");
   lcd.print(pumpState ? "PUMP:ON " : "PUMP:OFF");
 }
 
@@ -167,8 +167,7 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
       break;
 
     case WStype_CONNECTED:
-      Serial.println("[WS] Connected to Render.com ✓ — Setting AUTO mode");
-      pumpAutoMode = true; // Always default to AUTO mode on cloud connection
+      Serial.println("[WS] Connected to Render.com ✓ — Pure Automatic System");
       sendState();
       break;
 
@@ -212,22 +211,6 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
         }
         sendState();
       }
-      else if (typeStr == "pump" || typeStr == "pump_mode" || typeStr == "control") {
-        if (doc.containsKey("mode")) {
-          String m = doc["mode"].as<String>();
-          pumpAutoMode = (m.equalsIgnoreCase("AUTO") || m.equalsIgnoreCase("AUTOMATIC"));
-          prefs.putBool("pumpAuto", pumpAutoMode);
-          Serial.printf("[WS] Mode set to %s\n", pumpAutoMode ? "AUTO" : "MANUAL");
-        }
-        if (doc.containsKey("on") && !pumpAutoMode) {
-          pumpState = doc["on"].as<bool>();
-          digitalWrite(RELAY_PUMP, pumpState ? LOW : HIGH);
-        } else if (doc.containsKey("pumpOn") && !pumpAutoMode) {
-          pumpState = doc["pumpOn"].as<bool>();
-          digitalWrite(RELAY_PUMP, pumpState ? LOW : HIGH);
-        }
-        sendState();
-      }
       else if (typeStr == "settings" || typeStr == "config") {
         if (doc.containsKey("lowThreshold"))  autoPumpOn   = doc["lowThreshold"].as<float>();
         if (doc.containsKey("highThreshold")) autoPumpOff  = doc["highThreshold"].as<float>();
@@ -245,12 +228,7 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("\n=== NEXUS SMART HOME CONTROLLER BOOT ===");
-
-  // ALWAYS DEFAULT TO AUTOMATIC PUMP MODE ON POWER ON / REBOOT
-  prefs.begin("smarthome", false);
-  pumpAutoMode = true; // POWER ON ALWAYS STARTS IN AUTOMATIC MODE!
-  prefs.putBool("pumpAuto", true);
+  Serial.println("\n=== NEXUS SMART HOME — PURE AUTOMATIC PUMP SYSTEM ===");
 
   for (int i = 0; i < 5; i++) {
     pinMode(RELAY_LIGHTS[i], OUTPUT);
@@ -306,22 +284,20 @@ void loop() {
     lastSensorRead = millis();
     readSensors();
 
-    // ── ALWAYS AUTOMATIC PUMP TRIGGERING ──
-    if (pumpAutoMode) {
-      if (waterPercentage <= autoPumpOn) {
-        if (!pumpState) {
-          pumpState = true;
-          digitalWrite(RELAY_PUMP, LOW);  // Active LOW = Relay ON
-          Serial.printf("[POWER-ON AUTO PUMP] LOW WATER %.1f%% <= %.1f%% -> PUMP ON\n", waterPercentage, autoPumpOn);
-          sendState();
-        }
-      } else if (waterPercentage >= autoPumpOff) {
-        if (pumpState) {
-          pumpState = false;
-          digitalWrite(RELAY_PUMP, HIGH); // Active LOW = Relay OFF
-          Serial.printf("[POWER-ON AUTO PUMP] HIGH WATER %.1f%% >= %.1f%% -> PUMP OFF\n", waterPercentage, autoPumpOff);
-          sendState();
-        }
+    // ── 100% PURE AUTOMATIC PUMP CONTROL ──
+    if (waterPercentage <= autoPumpOn) {
+      if (!pumpState) {
+        pumpState = true;
+        digitalWrite(RELAY_PUMP, LOW);  // Active LOW = Relay ON
+        Serial.printf("[PURE AUTO PUMP] LOW WATER %.1f%% <= %.1f%% -> PUMP ON\n", waterPercentage, autoPumpOn);
+        sendState();
+      }
+    } else if (waterPercentage >= autoPumpOff) {
+      if (pumpState) {
+        pumpState = false;
+        digitalWrite(RELAY_PUMP, HIGH); // Active LOW = Relay OFF
+        Serial.printf("[PURE AUTO PUMP] HIGH WATER %.1f%% >= %.1f%% -> PUMP OFF\n", waterPercentage, autoPumpOff);
+        sendState();
       }
     }
 
