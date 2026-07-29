@@ -303,8 +303,8 @@ void loop() {
     checkSafetyAndSensors();
   }
 
-  // 2. Telemetry Broadcast every 200ms
-  if (millis() - lastTelemetryTime >= 200) {
+  // 2. Telemetry Broadcast every 50ms for ZERO delay (Live mapping)
+  if (millis() - lastTelemetryTime >= 50) {
     lastTelemetryTime = millis();
     sendState();
   }
