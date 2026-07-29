@@ -87,9 +87,19 @@ void checkSafetyAndSensors() {
   waterDistanceCm = getRawDistance();
   waterPercentage = calculateLevelPercent(waterDistanceCm);
 
-  // Digital Sensor Readings (Active LOW: LOW = Detected)
-  gasDetected   = (digitalRead(GAS_SENSOR_PIN) == LOW);
-  flameDetected = (digitalRead(FLAME_SENSOR_PIN) == LOW);
+  // Digital Sensor Readings (Active LOW: LOW = Leak/Fire)
+  bool rawGas   = (digitalRead(GAS_SENSOR_PIN) == LOW);
+  bool rawFlame = (digitalRead(FLAME_SENSOR_PIN) == LOW);
+
+  if (rawGas != gasDetected) {
+    gasDetected = rawGas;
+    Serial.printf("[SENSOR ALERT] Gas Leak Status: %s\n", gasDetected ? "LEAK DETECTED!" : "NORMAL");
+  }
+
+  if (rawFlame != flameDetected) {
+    flameDetected = rawFlame;
+    Serial.printf("[SENSOR ALERT] Flame Sensor (Pin 35): %s (Raw Value: %d)\n", flameDetected ? "FIRE DETECTED!" : "NORMAL", digitalRead(FLAME_SENSOR_PIN));
+  }
 
   // 1. Automatic Water Pump Control
   if (waterPercentage <= autoPumpOn) {
@@ -233,7 +243,7 @@ void setup() {
 
   // Digital Sensors
   pinMode(GAS_SENSOR_PIN, INPUT_PULLUP);
-  pinMode(FLAME_SENSOR_PIN, INPUT_PULLUP);
+  pinMode(FLAME_SENSOR_PIN, INPUT);
 
   // Ultrasonic
   pinMode(TRIG_PIN, OUTPUT);

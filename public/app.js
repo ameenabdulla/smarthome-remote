@@ -107,9 +107,7 @@ function connectWebSocket() {
         updateTankUI(data);
         updatePumpUI(data);
         updateDeviceStatus(data.online);
-        if (data.gate && data.gate.pos !== undefined && typeof setGateAngleUI === 'function') {
-          setGateAngleUI(data.gate.pos);
-        }
+        if (data.safety) updateSafetyUI(data.safety);
       }
 
       if (data.type === 'config') {
@@ -285,6 +283,63 @@ btnSave.addEventListener('click', async () => {
     lucide.createIcons();
   }, 1500);
 });
+
+// ── Safety & Hazard Monitors UI Update ─────────────────────────
+function updateSafetyUI(safety) {
+  if (!safety) return;
+  const gasBadge = document.getElementById('gas-status-badge');
+  const flameBadge = document.getElementById('flame-status-badge');
+  const safetyStatusText = document.getElementById('safety-status-text');
+  const gasCard = document.getElementById('gas-card');
+  const flameCard = document.getElementById('flame-card');
+
+  const isGas = (safety.gas === 1 || safety.gas === true);
+  const isFlame = (safety.flame === 1 || safety.flame === true);
+
+  if (gasBadge && gasCard) {
+    if (isGas) {
+      gasBadge.textContent = 'DANGER! LEAK';
+      gasBadge.style.color = '#ef4444';
+      gasCard.style.borderColor = '#ef4444';
+      gasCard.style.background = 'rgba(239, 68, 68, 0.15)';
+    } else {
+      gasBadge.textContent = 'SAFE';
+      gasBadge.style.color = '#10b981';
+      gasCard.style.borderColor = 'rgba(255,255,255,0.08)';
+      gasCard.style.background = 'rgba(255,255,255,0.02)';
+    }
+  }
+
+  if (flameBadge && flameCard) {
+    if (isFlame) {
+      flameBadge.textContent = 'FIRE ALERT!';
+      flameBadge.style.color = '#ef4444';
+      flameCard.style.borderColor = '#ef4444';
+      flameCard.style.background = 'rgba(239, 68, 68, 0.15)';
+    } else {
+      flameBadge.textContent = 'SAFE';
+      flameBadge.style.color = '#10b981';
+      flameCard.style.borderColor = 'rgba(255,255,255,0.08)';
+      flameCard.style.background = 'rgba(255,255,255,0.02)';
+    }
+  }
+
+  if (safetyStatusText) {
+    if (isFlame && isGas) {
+      safetyStatusText.textContent = 'EMERGENCY: FIRE & GAS LEAK DETECTED!';
+      safetyStatusText.style.color = '#ef4444';
+    } else if (isFlame) {
+      safetyStatusText.textContent = 'EMERGENCY: FIRE/FLAME DETECTED!';
+      safetyStatusText.style.color = '#ef4444';
+    } else if (isGas) {
+      safetyStatusText.textContent = 'EMERGENCY: GAS LEAK DETECTED!';
+      safetyStatusText.style.color = '#ef4444';
+    } else {
+      safetyStatusText.textContent = 'Status: ALL SYSTEMS NORMAL';
+      safetyStatusText.style.color = 'rgba(255,255,255,0.5)';
+    }
+  }
+}
 
 // Run auth check on initialization
 checkAuth();

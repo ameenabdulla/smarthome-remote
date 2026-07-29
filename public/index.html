@@ -123,8 +123,37 @@
           </div>
         </div>
 
+        <!-- Safety & Hazard Monitoring Card -->
+        <div class="control-card" style="margin-top: 15px;">
+          <div class="control-header">
+            <div class="control-icon-wrap" style="background: rgba(239, 68, 68, 0.15); color: #ef4444;">
+              <i data-lucide="shield-alert"></i>
+            </div>
+            <div>
+              <h3>Safety & Hazard Monitors</h3>
+              <p class="control-sub" id="safety-status-text">Status: ALL SYSTEMS NORMAL</p>
+            </div>
+          </div>
+          
+          <div class="control-body">
+            <div class="metrics-grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 0;">
+              <!-- Gas Leak Badge -->
+              <div class="metric-card" id="gas-card" style="border-color: rgba(255,255,255,0.08);">
+                <span class="metric-label"><i data-lucide="wind" style="width: 14px; height: 14px;"></i> Gas Sensor (GPIO 32)</span>
+                <span class="metric-value" id="gas-status-badge" style="font-size: 1rem; color: #10b981;">SAFE</span>
+              </div>
+              
+              <!-- Flame Sensor Badge -->
+              <div class="metric-card" id="flame-card" style="border-color: rgba(255,255,255,0.08);">
+                <span class="metric-label"><i data-lucide="flame" style="width: 14px; height: 14px;"></i> Flame Sensor (GPIO 35)</span>
+                <span class="metric-value" id="flame-status-badge" style="font-size: 1rem; color: #10b981;">SAFE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Pump Control Card (Sleek & Compact) -->
-        <div class="control-card">
+        <div class="control-card" style="margin-top: 15px;">
           <div class="control-header">
             <div class="control-icon-wrap">
               <i data-lucide="zap"></i>
