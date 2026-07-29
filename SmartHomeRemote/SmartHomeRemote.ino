@@ -1,15 +1,15 @@
 /*
  * ======================================================================================
- * SMART HOME REMOTE — MASTER FIRMWARE (DYNAMIC SERVO SPEED SLIDER & ULTRA-SMOOTH GLIDE)
+ * SMART HOME REMOTE — IR AUTO-OPEN 90° & 5-SECOND AUTO-RETURN TO 0°
  * Hardware Pinout:
- *   - Smart Light Relays (5 Channels): GPIO 13, 14, 27, 26, 33 (Active-LOW)
+ *   - Smart Light Relays (5 Channels): GPIO 13, 14, 27, 26, 33 (Active-LOW, 0ms Instant Response)
  *   - Auto Pump Relay: GPIO 25 (Active-LOW: ON <= 20%, OFF >= 90%)
- *   - Gate Servo: GPIO 18 (PWM Servo drive — Ultra-Smooth Adjustable Speed)
- *   - Aux Servo: GPIO 17 (PWM Servo drive — Ultra-Smooth Adjustable Speed)
+ *   - Gate Servo: GPIO 18 (PWM Servo drive — IR 90° -> 5s Auto-Return 0°)
+ *   - Aux Servo: GPIO 17 (PWM Servo drive — Direct Web Slider 0°-180°)
  *   - Ultrasonic Sensor: GPIO 5 (Trig), GPIO 4 (Echo)
  *   - Digital Gas Sensor (MQ DO): GPIO 32 (Input: Active-LOW)
  *   - Digital Flame Sensor (DO): GPIO 35 (Input: Active-LOW)
- *   - Digital IR Motion Sensor: GPIO 34 (Input: Active-LOW -> Moves Gate 90°)
+ *   - Digital IR Motion Sensor: GPIO 34 (Input: Active-LOW -> Gate 90°, 5s Return to 0°)
  *   - Active Alarm Buzzer: GPIO 19 (Output: Active-HIGH)
  *   - I2C LCD Display (16x2): GPIO 21 (SDA), GPIO 22 (SCL), Address 0x27
  * ======================================================================================
@@ -54,15 +54,9 @@ float autoPumpOff  = 90.0f; // OFF when >= 90%
 bool lightStates[5]   = {false, false, false, false, false};
 bool pumpState        = false;
 
-// ── Ultra-Smooth Dynamic Servo Speed Variables (Zero Jerking) ──
-int targetGateAngle   = 0;
-int currentGateAngle  = 0;
-
-int targetAuxAngle    = 0;
-int currentAuxAngle   = 0;
-
-// Dynamic Speed Control (ms per degree: Default 20ms, range 5ms - 50ms)
-int servoStepDelayMs  = 20;
+// Direct Servo Angle States
+int gateServoAngle    = 0;
+int auxServoAngle     = 0;
 
 float waterDistanceCm = 0.0f;
 float waterPercentage = 0.0f;
@@ -71,54 +65,25 @@ bool  flameDetected   = false;
 bool  irDetected      = false;
 bool  hasLCD          = false;
 
+// Timers
 unsigned long lastTelemetryTime = 0;
 unsigned long lastBlinkTime     = 0;
 unsigned long lastSensorRead    = 0;
-bool buzzerState                = false;
+unsigned long irTriggerTime     = 0; // Timer for 5-second auto-return to 0°
+bool  irActiveTimer             = false;
+bool  buzzerState               = false;
 
 WebSocketsClient webSocket;
 Servo            gateServo;
 Servo            auxServo;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-// ─────────────────────────────────────────────
-// Dynamic Ultra-Smooth Servo Interpolation Engine
-// ─────────────────────────────────────────────
-void updateSmoothServos() {
-  static unsigned long lastGateStep = 0;
-  static unsigned long lastAuxStep  = 0;
-  unsigned long now = millis();
-
-  // Dynamic Gate Servo Glide
-  if (now - lastGateStep >= (unsigned long)servoStepDelayMs) {
-    lastGateStep = now;
-    if (currentGateAngle < targetGateAngle) {
-      currentGateAngle++;
-      gateServo.write(currentGateAngle);
-    } else if (currentGateAngle > targetGateAngle) {
-      currentGateAngle--;
-      gateServo.write(currentGateAngle);
-    }
-  }
-
-  // Dynamic Aux Servo Glide
-  if (now - lastAuxStep >= (unsigned long)servoStepDelayMs) {
-    lastAuxStep = now;
-    if (currentAuxAngle < targetAuxAngle) {
-      currentAuxAngle++;
-      auxServo.write(currentAuxAngle);
-    } else if (currentAuxAngle > targetAuxAngle) {
-      currentAuxAngle--;
-      auxServo.write(currentAuxAngle);
-    }
-  }
-}
-
+// Non-blocking 8ms short ultrasonic distance read
 float getRawDistance() {
   digitalWrite(TRIG_PIN, LOW);  delayMicroseconds(2);
   digitalWrite(TRIG_PIN, HIGH); delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
-  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+  long duration = pulseIn(ECHO_PIN, HIGH, 8000);
   if (duration > 0) {
     float dist = (duration * 0.0343f) / 2.0f;
     if (dist >= 2.0f && dist <= 450.0f) return dist;
@@ -137,7 +102,7 @@ void checkSafetyAndSensors() {
   waterDistanceCm = getRawDistance();
   waterPercentage = calculateLevelPercent(waterDistanceCm);
 
-  // Digital Sensor Readings (Active LOW: LOW = Hazard/Motion Detected)
+  // Digital Sensor Readings (Active LOW)
   gasDetected   = (digitalRead(GAS_SENSOR_PIN) == LOW);
   flameDetected = (digitalRead(FLAME_SENSOR_PIN) == LOW);
   irDetected    = (digitalRead(IR_SENSOR_PIN) == LOW);
@@ -157,21 +122,26 @@ void checkSafetyAndSensors() {
     }
   }
 
-  // 2. IR Sensor Automatic Gate Trigger (Moves Gate 90° Smoothly)
+  // 2. IR Sensor Trigger: Move 90° -> After 5s Return to 0°
   if (irDetected || gasDetected || flameDetected) {
-    if (targetGateAngle != 90) {
-      targetGateAngle = 90;
-      Serial.println("[IR / SAFETY TRIGGER] Object/Motion Detected -> GATE SMOOTH OPEN 90°");
+    if (gateServoAngle != 90) {
+      gateServoAngle = 90;
+      gateServo.write(90);
+      Serial.println("[IR DETECTED] Gate Moved to 90°!");
     }
-  } else {
-    // When IR and hazards are clear, close gate smoothly
-    if (targetGateAngle != 0) {
-      targetGateAngle = 0;
-      Serial.println("[IR CLEAR] Path Clear -> GATE SMOOTH CLOSE 0°");
+    irTriggerTime = millis(); // Continuously refresh 5-second countdown while object is present
+    irActiveTimer = true;
+  } else if (irActiveTimer) {
+    // 5 seconds after object leaves, automatically return to 0°!
+    if (millis() - irTriggerTime >= 5000) {
+      gateServoAngle = 0;
+      gateServo.write(0);
+      irActiveTimer = false;
+      Serial.println("[5s TIMER EXPIRED] Gate Returned to 0°!");
     }
   }
 
-  // 3. Emergency Hazard Alarm (Gas or Flame Detected)
+  // 3. Emergency Alarm (Gas or Flame Detected)
   if (gasDetected || flameDetected) {
     if (millis() - lastBlinkTime >= 150) {
       lastBlinkTime = millis();
@@ -179,10 +149,10 @@ void checkSafetyAndSensors() {
       digitalWrite(BUZZER_PIN, buzzerState ? HIGH : LOW);
     }
   } else {
-    digitalWrite(BUZZER_PIN, LOW); // Silence Buzzer when safe
+    digitalWrite(BUZZER_PIN, LOW);
   }
 
-  // 4. Update 16x2 I2C LCD Display
+  // 4. Update 16x2 LCD Display
   if (hasLCD) {
     lcd.setCursor(0, 0);
     if (flameDetected) {
@@ -200,8 +170,8 @@ void checkSafetyAndSensors() {
     lcd.setCursor(0, 1);
     if (gasDetected || flameDetected) {
       lcd.print("GATE EMERGENCY 90");
-    } else if (irDetected) {
-      lcd.print("IR AUTO GATE 90 ");
+    } else if (irActiveTimer) {
+      lcd.print("GATE 90 (5s RET0)");
     } else {
       lcd.print(pumpState ? "PUMP: RUNNING   " : "PUMP: STOPPED   ");
     }
@@ -218,8 +188,8 @@ void sendState() {
   for (int i = 0; i < 5; i++) lights.add(lightStates[i]);
 
   JsonObject gate = doc["gate"].to<JsonObject>();
-  gate["pos"]    = currentGateAngle;
-  gate["status"] = (currentGateAngle > 10) ? "OPEN" : "CLOSED";
+  gate["pos"]    = gateServoAngle;
+  gate["status"] = (gateServoAngle > 10) ? "OPEN" : "CLOSED";
 
   JsonObject pump = doc["pump"].to<JsonObject>();
   pump["on"]   = pumpState;
@@ -231,8 +201,7 @@ void sendState() {
   water["height"]   = tankDepthCm - (waterDistanceCm - sensorOffset);
 
   JsonObject servo = doc["servo"].to<JsonObject>();
-  servo["angle"] = currentAuxAngle;
-  servo["speed"] = servoStepDelayMs;
+  servo["angle"] = auxServoAngle;
 
   JsonObject safety = doc["safety"].to<JsonObject>();
   safety["gas"]   = gasDetected ? 1 : 0;
@@ -274,26 +243,21 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
       }
       else if (typeStr == "gate") {
         if (doc.containsKey("pos")) {
-          targetGateAngle = constrain(doc["pos"].as<int>(), 0, 180);
+          gateServoAngle = constrain(doc["pos"].as<int>(), 0, 90);
+          gateServo.write(gateServoAngle);
+          irActiveTimer = false; // Manual web override cancels auto timer
         } else if (doc.containsKey("cmd")) {
           String cmd = doc["cmd"].as<String>();
-          if (cmd == "open") { targetGateAngle = 90; }
-          else if (cmd == "close") { targetGateAngle = 0; }
+          if (cmd == "open") { gateServoAngle = 90; gateServo.write(90); }
+          else if (cmd == "close") { gateServoAngle = 0; gateServo.write(0); }
+          irActiveTimer = false;
         }
         sendState();
       }
       else if (typeStr == "servo") {
         if (doc.containsKey("angle")) {
-          targetAuxAngle = constrain(doc["angle"].as<int>(), 0, 180);
-        }
-        if (doc.containsKey("speed")) {
-          servoStepDelayMs = constrain(doc["speed"].as<int>(), 5, 50);
-        }
-        sendState();
-      }
-      else if (typeStr == "servo_speed") {
-        if (doc.containsKey("speed")) {
-          servoStepDelayMs = constrain(doc["speed"].as<int>(), 5, 50);
+          auxServoAngle = constrain(doc["angle"].as<int>(), 0, 180);
+          auxServo.write(auxServoAngle);
         }
         sendState();
       }
@@ -302,7 +266,6 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
         if (doc.containsKey("highThreshold")) autoPumpOff  = doc["highThreshold"].as<float>();
         if (doc.containsKey("tankDepth"))     tankDepthCm  = doc["tankDepth"].as<float>();
         if (doc.containsKey("sensorOffset"))  sensorOffset = doc["sensorOffset"].as<float>();
-        if (doc.containsKey("servoSpeed"))   servoStepDelayMs = constrain(doc["servoSpeed"].as<int>(), 5, 50);
         sendState();
       }
       break;
@@ -314,7 +277,7 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("\n=== SMART HOME REMOTE — DYNAMIC SERVO SPEED FIRMWARE ===");
+  Serial.println("\n=== SMART HOME REMOTE — IR 90° & 5s AUTO-RETURN TO 0° FIRMWARE ===");
 
   // Relays Setup (Active-LOW: HIGH = OFF)
   for (int i = 0; i < 5; i++) {
@@ -328,16 +291,20 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
 
-  // Digital Sensors (Active-LOW DO pins)
+  // Digital Sensors
   pinMode(GAS_SENSOR_PIN, INPUT_PULLUP);
   pinMode(FLAME_SENSOR_PIN, INPUT_PULLUP);
   pinMode(IR_SENSOR_PIN, INPUT_PULLUP);
 
-  // Servos Setup
-  gateServo.attach(SERVO_GATE_PIN);
-  gateServo.write(currentGateAngle);
-  auxServo.attach(SERVO_AUX_PIN);
-  auxServo.write(currentAuxAngle);
+  // Servos Setup (500us - 2400us pulse bounds for 100% hardware compatibility)
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+  gateServo.setPeriodHertz(50);
+  auxServo.setPeriodHertz(50);
+  gateServo.attach(SERVO_GATE_PIN, 500, 2400);
+  auxServo.attach(SERVO_AUX_PIN, 500, 2400);
+  gateServo.write(gateServoAngle);
+  auxServo.write(auxServoAngle);
 
   // Ultrasonic
   pinMode(TRIG_PIN, OUTPUT);
@@ -346,13 +313,13 @@ void setup() {
 
   // LCD Display
   Wire.begin(21, 22);
-  Wire.setTimeOut(100);
+  Wire.setTimeOut(50);
   Wire.beginTransmission(0x27);
   if (Wire.endTransmission() == 0) {
     hasLCD = true;
     lcd.init(); lcd.backlight(); lcd.clear();
     lcd.print("Smart Home IoT");
-    lcd.setCursor(0, 1); lcd.print("Speed Servo Mode");
+    lcd.setCursor(0, 1); lcd.print("IR 90->0 (5s)");
   }
 
   // Immediate sensor check on boot
@@ -375,17 +342,14 @@ void setup() {
 void loop() {
   webSocket.loop();
 
-  // 1. Dynamic Smooth Servo Gliding Engine (Custom speed step timing)
-  updateSmoothServos();
-
-  // 2. Sensor & Safety Check every 100ms
-  if (millis() - lastSensorRead >= 100) {
+  // Sensor & Safety Check every 50ms (non-blocking)
+  if (millis() - lastSensorRead >= 50) {
     lastSensorRead = millis();
     checkSafetyAndSensors();
   }
 
-  // 3. Telemetry Broadcast every 250ms
-  if (millis() - lastTelemetryTime >= 250) {
+  // Telemetry Broadcast every 200ms
+  if (millis() - lastTelemetryTime >= 200) {
     lastTelemetryTime = millis();
     sendState();
   }
