@@ -107,6 +107,9 @@ function connectWebSocket() {
         updateTankUI(data);
         updatePumpUI(data);
         updateDeviceStatus(data.online);
+        if (data.gate && data.gate.pos !== undefined && typeof setGateAngleUI === 'function') {
+          setGateAngleUI(data.gate.pos);
+        }
       }
 
       if (data.type === 'config') {
