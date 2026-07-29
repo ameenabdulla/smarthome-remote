@@ -90,7 +90,7 @@ void ultrasonicTask(void* param) {
       float d = (dur * 0.0343f) / 2.0f;
       if (d >= 2.0f && d <= 450.0f) {
         xSemaphoreTake(ultraMutex, portMAX_DELAY);
-        smoothedDistance = (smoothedDistance < 1.0f) ? d : (smoothedDistance * 0.6f + d * 0.4f);
+        smoothedDistance = d;
         xSemaphoreGive(ultraMutex);
       }
     }
