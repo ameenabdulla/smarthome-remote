@@ -150,21 +150,8 @@ function updateTankUI(state) {
 }
 
 function updatePumpUI(state) {
-  pumpToggle.checked = state.pumpOn;
-  pumpStateText.textContent = state.pumpOn ? 'ON' : 'OFF';
-  pumpStateIndicator.className = 'pump-state-badge ' + (state.pumpOn ? 'on' : 'off');
-
-  if (state.mode === 'AUTO') {
-    autoBtn.classList.add('active');
-    manualBtn.classList.remove('active');
-    pumpToggle.disabled = true;
-    pumpStatusText.textContent = 'Mode: AUTO';
-  } else {
-    autoBtn.classList.remove('active');
-    manualBtn.classList.add('active');
-    pumpToggle.disabled = false;
-    pumpStatusText.textContent = 'Mode: MANUAL';
-  }
+  if (pumpStateText) pumpStateText.textContent = state.pumpOn ? 'ON' : 'OFF';
+  if (pumpStateIndicator) pumpStateIndicator.className = 'pump-state-badge ' + (state.pumpOn ? 'on' : 'off');
 }
 
 function updateDeviceStatus(online) {
