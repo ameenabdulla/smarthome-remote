@@ -1,15 +1,12 @@
 /*
  * ======================================================================================
- * SMART HOME REMOTE — MASTER FIRMWARE (EXACT WORKING IR GATE & POWER-STABLE BOOT)
+ * SMART HOME REMOTE — MASTER FIRMWARE (LIGHTS, WATER PUMP, GAS, FLAME, BUZZER, LCD)
  * Hardware Pinout:
  *   - Smart Light Relays (5 Channels): GPIO 13, 14, 27, 26, 33 (Active-LOW)
- *   - Auto Pump Relay: GPIO 25 (Active-LOW: ON <= 20%, OFF >= 90%)
- *   - Gate Servo: GPIO 18 (PWM 50Hz, 500-2400us bounds)
- *   - Aux Servo: GPIO 17 (PWM 50Hz, 500-2400us bounds)
+ *   - Auto Water Pump Relay: GPIO 25 (Active-LOW: ON <= 20%, OFF >= 90%)
  *   - Ultrasonic Sensor: GPIO 5 (Trig), GPIO 4 (Echo)
  *   - Digital Gas Sensor (MQ DO): GPIO 32 (Input: Active-LOW)
  *   - Digital Flame Sensor (DO): GPIO 35 (Input: Active-LOW)
- *   - Digital IR Motion Sensor: GPIO 34 (Input: INPUT Mode)
  *   - Active Alarm Buzzer: GPIO 19 (Output: Active-HIGH)
  *   - I2C LCD Display (16x2): GPIO 21 (SDA), GPIO 22 (SCL), Address 0x27
  * ======================================================================================
@@ -19,7 +16,6 @@
 #include <WiFi.h>
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
-#include <ESP32Servo.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -34,14 +30,11 @@ const char* WS_PATH = "/device";
 // Pin Map
 static const uint8_t RELAY_LIGHTS[5] = {13, 14, 27, 26, 33};
 static const uint8_t RELAY_PUMP      = 25;
-static const uint8_t SERVO_GATE_PIN  = 18;
-static const uint8_t SERVO_AUX_PIN   = 17;
 static const uint8_t TRIG_PIN        = 5;
 static const uint8_t ECHO_PIN        = 4;
 
 static const uint8_t GAS_SENSOR_PIN   = 32; // Digital DO (LOW = Gas Leak)
 static const uint8_t FLAME_SENSOR_PIN = 35; // Digital DO (LOW = Fire Detected)
-static const uint8_t IR_SENSOR_PIN    = 34; // Digital DO (LOW = Motion Detected)
 static const uint8_t BUZZER_PIN       = 19; // Active Buzzer (HIGH = BEEP)
 
 // Tank Config
@@ -57,124 +50,16 @@ float waterDistanceCm = 0.0f;
 float waterPercentage = 0.0f;
 bool  gasDetected     = false;
 bool  flameDetected   = false;
-bool  irDetected      = false;
 bool  hasLCD          = false;
-
-// ── EXACT GATE SERVO CONTROL & USER LOGIC ──
-enum GateState { IDLE, OPENING, HOLDING_5S, CLOSING, WAITING_OBJECT_LEAVE, MANUAL };
-GateState gateState = IDLE;
-
-int currentPos         = 0;  // Start closed (0°)
-int targetPos          = 0;  // Target closed (0°)
-int servoStepDelayMs   = 15; // 15ms medium smooth speed
-unsigned long hold5sStartTime = 0;
-
-// Auxiliary Servo Variables
-int currentAuxAngle    = 0;
-int targetAuxAngle     = 0;
 
 // Timers
 unsigned long lastTelemetryTime = 0;
 unsigned long lastBlinkTime     = 0;
 unsigned long lastSensorRead    = 0;
-unsigned long lastGateStepTime  = 0;
-unsigned long lastAuxStepTime   = 0;
 bool buzzerState                = false;
 
 WebSocketsClient webSocket;
-Servo            gateServo;
-Servo            auxServo;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-
-// Single smooth move function (matches moveServoSmooth)
-void moveServoSmooth(int newTargetPos) {
-  targetPos = constrain(newTargetPos, 0, 90);
-  Serial.printf("[SERVO MOVE] Target set to %d° (Current: %d°)\n", targetPos, currentPos);
-}
-
-// ─────────────────────────────────────────────
-// EXACT USER IR GATE FLOW ENGINE
-// ─────────────────────────────────────────────
-void updateGateEngine() {
-  unsigned long now = millis();
-
-  // 1. Smooth 1-degree step movement at 15ms per degree
-  if (now - lastGateStepTime >= (unsigned long)servoStepDelayMs) {
-    lastGateStepTime = now;
-    if (currentPos < targetPos) {
-      currentPos++;
-      gateServo.write(currentPos);
-    } else if (currentPos > targetPos) {
-      currentPos--;
-      gateServo.write(currentPos);
-    }
-  }
-
-  // Aux Servo Movement
-  if (now - lastAuxStepTime >= (unsigned long)servoStepDelayMs) {
-    lastAuxStepTime = now;
-    if (currentAuxAngle < targetAuxAngle) {
-      currentAuxAngle++;
-      auxServo.write(currentAuxAngle);
-    } else if (currentAuxAngle > targetAuxAngle) {
-      currentAuxAngle--;
-      auxServo.write(currentAuxAngle);
-    }
-  }
-
-  // 2. Exact IR Gate State Machine Flow (Matches User Code)
-  switch (gateState) {
-    case IDLE:
-      // Ignore sensor during 3s boot power stabilization to prevent false opening on power-on
-      if (now > 3000 && (irDetected || gasDetected || flameDetected)) {
-        Serial.println("Gate Opening...");
-        gateState = OPENING;
-        moveServoSmooth(90); // Smoothly open to 90
-      }
-      break;
-
-    case OPENING:
-      if (currentPos >= 90) {
-        Serial.println("Waiting 5 seconds...");
-        gateState = HOLDING_5S;
-        hold5sStartTime = millis(); // Keep gate open for 5 seconds
-      }
-      break;
-
-    case HOLDING_5S:
-      if (!gasDetected && !flameDetected) {
-        if (now - hold5sStartTime >= 5000) {
-          Serial.println("Gate Closing...");
-          gateState = CLOSING;
-          moveServoSmooth(0); // Smoothly close to 0
-        }
-      } else {
-        hold5sStartTime = millis();
-      }
-      break;
-
-    case CLOSING:
-      if (currentPos <= 0) {
-        Serial.println("Waiting for object to leave sensor...");
-        gateState = WAITING_OBJECT_LEAVE;
-      }
-      break;
-
-    case WAITING_OBJECT_LEAVE:
-      // Wait until object leaves sensor (digitalRead(IR_PIN) == HIGH)
-      if (!irDetected && !gasDetected && !flameDetected) {
-        Serial.println("Sensor Clear -> Gate IDLE");
-        gateState = IDLE;
-      }
-      break;
-
-    case MANUAL:
-      if (currentPos == targetPos) {
-        gateState = IDLE;
-      }
-      break;
-  }
-}
 
 // ─────────────────────────────────────────────
 // SENSORS & SAFETY EVALUATION
@@ -205,9 +90,8 @@ void checkSafetyAndSensors() {
   // Digital Sensor Readings (Active LOW: LOW = Detected)
   gasDetected   = (digitalRead(GAS_SENSOR_PIN) == LOW);
   flameDetected = (digitalRead(FLAME_SENSOR_PIN) == LOW);
-  irDetected    = (digitalRead(IR_SENSOR_PIN) == LOW);
 
-  // 1. Unconditional Pure Automatic Pump Control
+  // 1. Automatic Water Pump Control
   if (waterPercentage <= autoPumpOn) {
     if (!pumpState) {
       pumpState = true;
@@ -240,8 +124,6 @@ void checkSafetyAndSensors() {
       lcd.print("! FIRE DETECTED !");
     } else if (gasDetected) {
       lcd.print("! GAS LEAK ALERT!");
-    } else if (irDetected) {
-      lcd.print("! IR MOTION ALERT");
     } else {
       lcd.print("Water: ");
       lcd.print(waterPercentage, 1);
@@ -250,9 +132,7 @@ void checkSafetyAndSensors() {
 
     lcd.setCursor(0, 1);
     if (gasDetected || flameDetected) {
-      lcd.print("GATE EMERGENCY 90");
-    } else if (gateState == HOLDING_5S) {
-      lcd.print("GATE 90 (HOLD 5S)");
+      lcd.print("EMERGENCY ALARM ");
     } else {
       lcd.print(pumpState ? "PUMP: RUNNING   " : "PUMP: STOPPED   ");
     }
@@ -271,10 +151,6 @@ void sendState() {
   JsonArray lights = doc["lights"].to<JsonArray>();
   for (int i = 0; i < 5; i++) lights.add(lightStates[i]);
 
-  JsonObject gate = doc["gate"].to<JsonObject>();
-  gate["pos"]    = currentPos;
-  gate["status"] = (currentPos > 10) ? "OPEN" : "CLOSED";
-
   JsonObject pump = doc["pump"].to<JsonObject>();
   pump["on"]   = pumpState;
   pump["mode"] = "AUTOMATIC";
@@ -284,14 +160,9 @@ void sendState() {
   water["level"]    = waterPercentage;
   water["height"]   = tankDepthCm - (waterDistanceCm - sensorOffset);
 
-  JsonObject servo = doc["servo"].to<JsonObject>();
-  servo["angle"] = currentAuxAngle;
-  servo["speed"] = servoStepDelayMs;
-
   JsonObject safety = doc["safety"].to<JsonObject>();
   safety["gas"]   = gasDetected ? 1 : 0;
   safety["flame"] = flameDetected ? 1 : 0;
-  safety["ir"]    = irDetected ? 1 : 0;
 
   doc["online"] = true;
   doc["rssi"]   = WiFi.RSSI();
@@ -322,35 +193,8 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
           if (idx >= 0 && idx < 5) {
             lightStates[idx] = doc["state"].as<bool>();
             digitalWrite(RELAY_LIGHTS[idx], lightStates[idx] ? LOW : HIGH);
+            Serial.printf("[LIGHT WEB] Light #%d set to %s\n", idx + 1, lightStates[idx] ? "ON" : "OFF");
           }
-        }
-        sendState();
-      }
-      else if (typeStr == "gate") {
-        if (doc.containsKey("pos")) {
-          int p = doc["pos"].as<int>();
-          gateState = MANUAL;
-          moveServoSmooth(p);
-        } else if (doc.containsKey("cmd")) {
-          String cmd = doc["cmd"].as<String>();
-          gateState = MANUAL;
-          if (cmd == "open") moveServoSmooth(90);
-          else if (cmd == "close") moveServoSmooth(0);
-        }
-        sendState();
-      }
-      else if (typeStr == "servo") {
-        if (doc.containsKey("angle")) {
-          targetAuxAngle = constrain(doc["angle"].as<int>(), 0, 180);
-        }
-        if (doc.containsKey("speed")) {
-          servoStepDelayMs = constrain(doc["speed"].as<int>(), 5, 50);
-        }
-        sendState();
-      }
-      else if (typeStr == "servo_speed") {
-        if (doc.containsKey("speed")) {
-          servoStepDelayMs = constrain(doc["speed"].as<int>(), 5, 50);
         }
         sendState();
       }
@@ -359,7 +203,6 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
         if (doc.containsKey("highThreshold")) autoPumpOff  = doc["highThreshold"].as<float>();
         if (doc.containsKey("tankDepth"))     tankDepthCm  = doc["tankDepth"].as<float>();
         if (doc.containsKey("sensorOffset"))  sensorOffset = doc["sensorOffset"].as<float>();
-        if (doc.containsKey("servoSpeed"))   servoStepDelayMs = constrain(doc["servoSpeed"].as<int>(), 5, 50);
         sendState();
       }
       break;
@@ -374,7 +217,7 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("\n=== SMART HOME REMOTE — POWER STABLE EXACT IR GATE FIRMWARE ===");
+  Serial.println("\n=== SMART HOME REMOTE MASTER FIRMWARE ===");
 
   // Relays Setup (Active-LOW: HIGH = OFF)
   for (int i = 0; i < 5; i++) {
@@ -388,25 +231,9 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
 
-  // Digital Sensors (IR Pin set to INPUT matches user working standalone code)
+  // Digital Sensors
   pinMode(GAS_SENSOR_PIN, INPUT_PULLUP);
   pinMode(FLAME_SENSOR_PIN, INPUT_PULLUP);
-  pinMode(IR_SENSOR_PIN, INPUT);
-
-  // Start Closed (0°) BEFORE attaching to prevent 90° power-on pulse
-  currentPos = 0;
-  targetPos = 0;
-  gateServo.write(0);
-  auxServo.write(0);
-
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  gateServo.setPeriodHertz(50);
-  auxServo.setPeriodHertz(50);
-  gateServo.attach(SERVO_GATE_PIN, 500, 2400);
-  auxServo.attach(SERVO_AUX_PIN, 500, 2400);
-  gateServo.write(0);
-  auxServo.write(0);
 
   // Ultrasonic
   pinMode(TRIG_PIN, OUTPUT);
@@ -421,7 +248,7 @@ void setup() {
     hasLCD = true;
     lcd.init(); lcd.backlight(); lcd.clear();
     lcd.print("Smart Home IoT");
-    lcd.setCursor(0, 1); lcd.print("Power-Stable Gate");
+    lcd.setCursor(0, 1); lcd.print("System Active");
   }
 
   // Immediate sensor check on boot
@@ -445,16 +272,13 @@ void setup() {
 void loop() {
   webSocket.loop();
 
-  // 1. Non-blocking Smooth Servo & IR Gate State Engine
-  updateGateEngine();
-
-  // 2. Non-blocking Sensor & Safety Check every 50ms
+  // 1. Non-blocking Sensor & Safety Check every 50ms
   if (millis() - lastSensorRead >= 50) {
     lastSensorRead = millis();
     checkSafetyAndSensors();
   }
 
-  // 3. Telemetry Broadcast every 200ms
+  // 2. Telemetry Broadcast every 200ms
   if (millis() - lastTelemetryTime >= 200) {
     lastTelemetryTime = millis();
     sendState();

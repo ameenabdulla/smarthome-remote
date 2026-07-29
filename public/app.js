@@ -226,67 +226,7 @@ modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) m
 inputLow.addEventListener('input', () => { lowVal.textContent = inputLow.value + '%'; });
 inputHigh.addEventListener('input', () => { highVal.textContent = inputHigh.value + '%'; });
 
-// ── Gate Control Visual Gauge & Preset Buttons ──────────────────────────
-const inputGatePos = document.getElementById('input-gate-pos');
-const inputServoSpeedCard = document.getElementById('input-servo-speed-card');
-const servoSpeedCardVal = document.getElementById('servo-speed-card-val');
 
-function setGateAngleUI(angle) {
-  angle = Math.max(0, Math.min(90, parseInt(angle) || 0));
-  const gateAngleVal = document.getElementById('gate-angle-value');
-  const gateSliderLabel = document.getElementById('gate-slider-label');
-  const gateNeedle = document.getElementById('gate-needle');
-  const gateArcActive = document.getElementById('gate-arc-active');
-  const gateStatusText = document.getElementById('gate-status-text');
-
-  if (gateAngleVal) gateAngleVal.textContent = angle;
-  if (gateSliderLabel) gateSliderLabel.textContent = angle + '°';
-  if (inputGatePos) inputGatePos.value = angle;
-  if (gateStatusText) gateStatusText.textContent = `Status: ${angle}° (${angle > 10 ? 'OPEN' : 'CLOSED'})`;
-
-  // Rotate Needle from -90 deg (at 0°) to +90 deg (at 90°)
-  if (gateNeedle) {
-    const rot = -90 + (angle / 90) * 180;
-    gateNeedle.setAttribute('transform', `rotate(${rot}, 100, 110)`);
-  }
-
-  // Update stroke-dashoffset for arc fill (251.2 max arc length)
-  if (gateArcActive) {
-    const offset = 251.2 - (angle / 90) * 251.2;
-    gateArcActive.setAttribute('stroke-dashoffset', offset);
-  }
-}
-
-// Preset Angle Buttons (0°, 30°, 45°, 60°, 90°)
-document.querySelectorAll('.btn-gate-preset').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const angle = parseInt(btn.getAttribute('data-angle'));
-    setGateAngleUI(angle);
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'gate', pos: angle }));
-    }
-  });
-});
-
-if (inputGatePos) {
-  inputGatePos.addEventListener('input', () => {
-    const pos = parseInt(inputGatePos.value);
-    setGateAngleUI(pos);
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'gate', pos: pos }));
-    }
-  });
-}
-
-if (inputServoSpeedCard && servoSpeedCardVal) {
-  inputServoSpeedCard.addEventListener('input', () => {
-    const spd = parseInt(inputServoSpeedCard.value);
-    servoSpeedCardVal.textContent = spd + ' ms';
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'servo_speed', speed: spd }));
-    }
-  });
-}
 
 // Save configurations & settings
 btnSave.addEventListener('click', async () => {
