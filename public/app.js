@@ -851,6 +851,7 @@ window.PumpControl = (function() {
     }
 
     function applyServerState(isOn, mode) {
+        if (mode) mode = mode.toLowerCase();
         if (mode && mode !== state.mode) {
             state.mode = mode;
             const autoBtn = document.getElementById('pump-auto-btn');
@@ -862,7 +863,7 @@ window.PumpControl = (function() {
                 if (autoBtn) autoBtn.classList.add('active');
                 if (manualBtn) manualBtn.classList.remove('active');
                 if (manualControls) manualControls.style.display = 'none';
-                if (modeLabel) modeLabel.textContent = 'Mode: AUTO';
+                if (modeLabel) modeLabel.textContent = 'Mode: AUTO (Low -> ON, High -> OFF)';
                 if (hint) hint.style.display = '';
             } else {
                 if (manualBtn) manualBtn.classList.add('active');
