@@ -319,7 +319,8 @@ void setup() {
 
   // Load saved settings
   prefs.begin("smarthome", false);
-  pumpAutoMode = prefs.getBool("pumpAuto", true);
+  pumpAutoMode = true; // Always default to AUTOMATIC mode
+  prefs.putBool("pumpAuto", true);
 
   // LCD
   Wire.begin(21, 22);
