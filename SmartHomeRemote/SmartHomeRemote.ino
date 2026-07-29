@@ -24,7 +24,7 @@ const char* WIFI_PASS = "air38725";
 // ─────────────────────────────────────────────
 // Render.com Server  (name your service exactly: juma-smarthome)
 // ─────────────────────────────────────────────
-const char* WS_HOST = "juma-smarthome.onrender.com";
+const char* WS_HOST = "smarthome-remote.onrender.com";
 const uint16_t WS_PORT = 443;
 const char* WS_PATH = "/device";
 
