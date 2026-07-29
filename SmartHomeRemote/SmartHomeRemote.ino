@@ -87,9 +87,19 @@ void checkSafetyAndSensors() {
   waterDistanceCm = getRawDistance();
   waterPercentage = calculateLevelPercent(waterDistanceCm);
 
-  // Digital Sensor Readings (Active LOW: LOW = Leak/Fire)
-  bool rawGas   = (digitalRead(GAS_SENSOR_PIN) == LOW);
-  bool rawFlame = (digitalRead(FLAME_SENSOR_PIN) == LOW);
+  // ── Debounced Digital Sensor Readings ──
+  // Read pins 10 times to prevent random electrical noise
+  int gasCount = 0;
+  int flameCount = 0;
+  for (int i = 0; i < 10; i++) {
+    if (digitalRead(GAS_SENSOR_PIN) == LOW) gasCount++;     // Active LOW module
+    if (digitalRead(FLAME_SENSOR_PIN) == HIGH) flameCount++; // Active HIGH module (or inverted logic)
+    delay(2);
+  }
+
+  // Trigger only if signal is steady (at least 8/10 readings match)
+  bool rawGas   = (gasCount >= 8);
+  bool rawFlame = (flameCount >= 8);
 
   if (rawGas != gasDetected) {
     gasDetected = rawGas;
