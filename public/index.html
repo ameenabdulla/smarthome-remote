@@ -11,12 +11,39 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <link rel="stylesheet" href="style.css?v=999">
+  <link rel="stylesheet" href="style.css?v=1000">
 </head>
 <body>
 
-  <!-- Main App Layout -->
-  <div class="app-container" id="app-container">
+  <!-- Login Page Overlay -->
+  <div class="login-overlay" id="login-overlay">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-logo-wrap">
+          <i data-lucide="droplets"></i>
+        </div>
+        <h2>JDT Water Tank</h2>
+        <p>Security Portal login required</p>
+      </div>
+      <form id="login-form">
+        <div class="input-group">
+          <label for="username"><i data-lucide="user"></i> Username</label>
+          <input type="text" id="username" placeholder="Enter username" required autocomplete="username">
+        </div>
+        <div class="input-group">
+          <label for="password"><i data-lucide="lock"></i> Password</label>
+          <input type="password" id="password" placeholder="Enter password" required autocomplete="current-password">
+        </div>
+        <div class="error-msg" id="login-error">Invalid credentials, please try again.</div>
+        <button type="submit" class="btn-login" id="btn-login">
+          Login <i data-lucide="arrow-right"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main App Layout (Hidden until logged in) -->
+  <div class="app-container" id="app-container" style="display: none;">
     <!-- Header -->
     <header>
       <div class="header-left">
@@ -25,13 +52,13 @@
         </div>
         <div>
           <h1>JDT Water Tank</h1>
-          <p class="header-sub">Islam Institute • IoT Automatic Controller</p>
+          <p class="header-sub">Islam Institute • IoT Controller</p>
         </div>
       </div>
       <div class="header-right">
-        <div id="connection-badge" class="badge online">
+        <div id="connection-badge" class="badge offline">
           <span class="pulse-dot"></span>
-          <span id="badge-text">ESP32 ONLINE</span>
+          <span id="badge-text">ESP32 OFFLINE</span>
         </div>
         <button class="settings-btn" id="settings-btn" title="Settings">
           <i data-lucide="settings"></i>
@@ -71,7 +98,7 @@
         </div>
       </section>
 
-      <!-- Right side: Live Info & Automatic Status Panel -->
+      <!-- Right side: Control & Live Info Panel -->
       <section class="dashboard-controls-section">
         
         <!-- Large Live Level Card -->
@@ -96,21 +123,25 @@
           </div>
         </div>
 
-        <!-- Automatic Pump Indicator Card -->
+        <!-- Pump Control Card (Sleek & Compact) -->
         <div class="control-card">
           <div class="control-header">
             <div class="control-icon-wrap">
               <i data-lucide="zap"></i>
             </div>
             <div>
-              <h3>Automatic Pump Controller</h3>
-              <p class="control-sub" id="pump-status-text">Mode: AUTOMATIC (Low ≤ 20% → ON, High ≥ 90% → OFF)</p>
+              <h3>Pump Control</h3>
+              <p class="control-sub" id="pump-status-text">Mode: AUTO</p>
             </div>
           </div>
           
           <div class="control-body">
-            <div class="pump-row">
-              <span class="pump-title">Motor Status</span>
+            <div class="mode-selector" style="justify-content: flex-start;">
+              <button class="mode-btn active" id="auto-btn" style="width: 100%; pointer-events: none;">AUTOMATIC SYSTEM</button>
+            </div>
+            
+            <div class="pump-row" style="margin-top: 15px;">
+              <span class="pump-title">Motor Pump Status</span>
               <div class="pump-state-badge" id="pump-state-indicator">
                 <span id="pump-state-text">OFF</span>
               </div>
@@ -134,7 +165,7 @@
         <!-- Depth Setting -->
         <div class="setting-group">
           <label>Tank Depth (cm)</label>
-          <p class="setting-desc">Total depth of the tank (height from sensor to bottom).</p>
+          <p class="setting-desc">Total depth of the tank (height from the sensor to the bottom).</p>
           <div class="input-row">
             <input type="number" id="input-depth" class="setting-input" value="100" min="10" max="500" step="1">
             <span class="input-unit">cm</span>
@@ -148,7 +179,7 @@
         <!-- Sensor Offset -->
         <div class="setting-group">
           <label>Sensor Offset (cm)</label>
-          <p class="setting-desc">Gap distance from sensor face to maximum water level (100% full).</p>
+          <p class="setting-desc">Gap distance from sensor face to the maximum water level (when tank is 100% full).</p>
           <div class="input-row">
             <input type="number" id="input-offset" class="setting-input" value="5" min="0" max="50" step="1">
             <span class="input-unit">cm</span>
@@ -158,7 +189,7 @@
         <!-- Thresholds -->
         <div class="setting-group">
           <label>Low Level Threshold (%)</label>
-          <p class="setting-desc">Pump turns ON automatically when water drops below this.</p>
+          <p class="setting-desc">Pump turns ON in AUTO mode when level drops below this.</p>
           <div class="slider-row">
             <input type="range" id="input-low" class="range-slider" min="5" max="50" value="20">
             <span class="range-val" id="low-val">20%</span>
@@ -167,24 +198,37 @@
         
         <div class="setting-group">
           <label>High Level Threshold (%)</label>
-          <p class="setting-desc">Pump turns OFF automatically when water rises above this.</p>
+          <p class="setting-desc">Pump turns OFF in AUTO mode when level rises above this.</p>
           <div class="slider-row">
             <input type="range" id="input-high" class="range-slider" min="50" max="100" value="90">
             <span class="range-val" id="high-val">90%</span>
           </div>
         </div>
 
+        <!-- Security Settings (Change Password) -->
+        <div class="setting-group border-top">
+          <label class="section-title"><i data-lucide="lock"></i> Change Web Password</label>
+          <p class="setting-desc">Update access credentials for this dashboard.</p>
+          
+          <div class="input-stack">
+            <input type="password" id="current-pass" class="setting-input" placeholder="Current Password">
+            <input type="password" id="new-pass" class="setting-input" placeholder="New Password">
+            <input type="password" id="confirm-pass" class="setting-input" placeholder="Confirm New Password">
+          </div>
+          <div class="error-msg-small" id="pass-error">Passwords do not match.</div>
+        </div>
+
       </div>
       <div class="modal-footer">
         <button class="btn-save" id="btn-save-settings">
-          <i data-lucide="save"></i> Save Settings
+          <i data-lucide="save"></i> Save Settings & Password
         </button>
       </div>
     </div>
   </div>
 
-  <script src="esp32-ws.js?v=999"></script>
-  <script src="app.js?v=999"></script>
+  <script src="esp32-ws.js?v=1000"></script>
+  <script src="app.js?v=1000"></script>
   <script>if(window.lucide) lucide.createIcons();</script>
 </body>
 </html>
