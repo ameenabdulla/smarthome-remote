@@ -31,7 +31,7 @@ const char* WS_PATH = "/device";
 static const uint8_t RELAY_LIGHTS[5] = {13, 14, 27, 26, 33};
 static const uint8_t RELAY_PUMP      = 25;
 static const uint8_t TRIG_PIN        = 5;
-static const uint8_t ECHO_PIN        = 4;
+static const uint8_t ECHO_PIN        = 18;
 
 static const uint8_t GAS_SENSOR_PIN   = 32; // Digital DO (LOW = Gas Leak)
 static const uint8_t FLAME_SENSOR_PIN = 35; // Digital DO (LOW = Fire Detected)
@@ -69,7 +69,7 @@ float getRawDistance() {
   digitalWrite(TRIG_PIN, HIGH); delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
   
-  // 30ms timeout allows up to ~5 meters range. 8ms was too short for empty tanks!
+  // 30ms timeout allows up to ~5 meters range.
   long duration = pulseIn(ECHO_PIN, HIGH, 30000); 
   if (duration > 0) {
     float dist = (duration * 0.0343f) / 2.0f;
@@ -91,50 +91,42 @@ float calculateLevelPercent(float dist) {
   return (waterLevel / tankDepthCm) * 100.0f;
 }
 
-void checkSafetyAndSensors() {
-  waterDistanceCm = getRawDistance();
-  waterPercentage = calculateLevelPercent(waterDistanceCm);
+void processSensorsAndLogic() {
+  bool changed = false;
 
-  // ── Debounced Digital Sensor Readings ──
-  // Read pins 10 times to prevent random electrical noise
-  int gasCount = 0;
-  int flameCount = 0;
-  for (int i = 0; i < 10; i++) {
-    if (digitalRead(GAS_SENSOR_PIN) == LOW) gasCount++;     // Active LOW module
-    if (digitalRead(FLAME_SENSOR_PIN) == HIGH) flameCount++; // Active HIGH module (or inverted logic)
-    delay(2);
+  // 1. Instant Ultrasonic Read
+  float newDist = getRawDistance();
+  if (abs(newDist - waterDistanceCm) >= 0.1f) {
+    waterDistanceCm = newDist;
+    waterPercentage = calculateLevelPercent(waterDistanceCm);
+    changed = true;
   }
 
-  // Trigger only if signal is steady (at least 8/10 readings match)
-  bool rawGas   = (gasCount >= 8);
-  bool rawFlame = (flameCount >= 8);
+  // 2. Instant Digital Sensor Readings (NO DELAYS/NO DEBOUNCING FOR MAX SPEED)
+  bool rawGas   = (digitalRead(GAS_SENSOR_PIN) == LOW);
+  bool rawFlame = (digitalRead(FLAME_SENSOR_PIN) == HIGH);
 
   if (rawGas != gasDetected) {
     gasDetected = rawGas;
-    Serial.printf("[SENSOR ALERT] Gas Leak Status: %s\n", gasDetected ? "LEAK DETECTED!" : "NORMAL");
+    changed = true;
   }
-
   if (rawFlame != flameDetected) {
     flameDetected = rawFlame;
-    Serial.printf("[SENSOR ALERT] Flame Sensor (Pin 35): %s (Raw Value: %d)\n", flameDetected ? "FIRE DETECTED!" : "NORMAL", digitalRead(FLAME_SENSOR_PIN));
+    changed = true;
   }
 
-  // 1. Automatic Water Pump Control
-  if (waterPercentage <= autoPumpOn) {
-    if (!pumpState) {
-      pumpState = true;
-      digitalWrite(RELAY_PUMP, LOW);  // Active-LOW: Pump ON
-      Serial.printf("[PUMP] LOW WATER %.1f%% -> ON\n", waterPercentage);
-    }
-  } else if (waterPercentage >= autoPumpOff) {
-    if (pumpState) {
-      pumpState = false;
-      digitalWrite(RELAY_PUMP, HIGH); // Active-LOW: Pump OFF
-      Serial.printf("[PUMP] HIGH WATER %.1f%% -> OFF\n", waterPercentage);
-    }
+  // 3. Automatic Water Pump Control
+  if (waterPercentage <= autoPumpOn && !pumpState) {
+    pumpState = true;
+    digitalWrite(RELAY_PUMP, LOW);  // Active-LOW: Pump ON
+    changed = true;
+  } else if (waterPercentage >= autoPumpOff && pumpState) {
+    pumpState = false;
+    digitalWrite(RELAY_PUMP, HIGH); // Active-LOW: Pump OFF
+    changed = true;
   }
 
-  // 2. Emergency Hazard Alarm (Gas or Flame)
+  // 4. Emergency Hazard Alarm (Gas or Flame)
   if (gasDetected || flameDetected) {
     if (millis() - lastBlinkTime >= 150) {
       lastBlinkTime = millis();
@@ -145,8 +137,8 @@ void checkSafetyAndSensors() {
     digitalWrite(BUZZER_PIN, LOW);
   }
 
-  // 3. Update 16x2 LCD Display
-  if (hasLCD) {
+  // 5. Update LCD (Only updating specific blocks to prevent blocking I2C)
+  if (hasLCD && changed) {
     lcd.setCursor(0, 0);
     if (flameDetected) {
       lcd.print("! FIRE DETECTED !");
@@ -157,13 +149,18 @@ void checkSafetyAndSensors() {
       lcd.print(waterPercentage, 1);
       lcd.print("%   ");
     }
-
     lcd.setCursor(0, 1);
     if (gasDetected || flameDetected) {
       lcd.print("EMERGENCY ALARM ");
     } else {
       lcd.print(pumpState ? "PUMP: RUNNING   " : "PUMP: STOPPED   ");
     }
+  }
+
+  // 6. INSTANT WebSocket Broadcast if ANY value changed
+  if (changed) {
+    sendState();
+    lastTelemetryTime = millis();
   }
 }
 
@@ -276,9 +273,6 @@ void setup() {
     lcd.setCursor(0, 1); lcd.print("System Active");
   }
 
-  // Immediate sensor check on boot
-  checkSafetyAndSensors();
-
   // WiFi Connection
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -297,14 +291,14 @@ void setup() {
 void loop() {
   webSocket.loop();
 
-  // 1. Non-blocking Sensor & Safety Check every 50ms
-  if (millis() - lastSensorRead >= 50) {
+  // Non-blocking Sensor Check every 20ms for absolute minimum delay!
+  if (millis() - lastSensorRead >= 20) {
     lastSensorRead = millis();
-    checkSafetyAndSensors();
+    processSensorsAndLogic();
   }
 
-  // 2. Telemetry Broadcast every 50ms for ZERO delay (Live mapping)
-  if (millis() - lastTelemetryTime >= 50) {
+  // Safety fallback broadcast if no changes happen for 1 second
+  if (millis() - lastTelemetryTime >= 1000) {
     lastTelemetryTime = millis();
     sendState();
   }
