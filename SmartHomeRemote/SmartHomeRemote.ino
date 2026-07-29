@@ -179,21 +179,18 @@ void sendState() {
   JsonArray lights = doc["lights"].to<JsonArray>();
   for (int i = 0; i < 5; i++) lights.add(lightStates[i]);
 
-  JsonObject pump = doc["pump"].to<JsonObject>();
-  pump["on"]   = pumpState;
-  pump["mode"] = "AUTOMATIC";
+  // Flat JSON structure expected by app.js
+  doc["levelPercent"] = waterPercentage;
+  doc["distanceCm"]   = waterDistanceCm;
+  doc["pumpOn"]       = pumpState;
+  doc["mode"]         = "AUTO";
+  doc["rssi"]         = WiFi.RSSI();
+  doc["online"]       = true;
 
-  JsonObject water = doc["water"].to<JsonObject>();
-  water["distance"] = waterDistanceCm;
-  water["level"]    = waterPercentage;
-  water["height"]   = tankDepthCm - (waterDistanceCm - sensorOffset);
-
+  // Nested safety structure is handled correctly by updateSafetyUI()
   JsonObject safety = doc["safety"].to<JsonObject>();
   safety["gas"]   = gasDetected ? 1 : 0;
   safety["flame"] = flameDetected ? 1 : 0;
-
-  doc["online"] = true;
-  doc["rssi"]   = WiFi.RSSI();
 
   String out;
   serializeJson(doc, out);
