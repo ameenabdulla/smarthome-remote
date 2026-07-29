@@ -136,7 +136,7 @@ void sendState() {
 
   JsonObject pump = doc["pump"].to<JsonObject>();
   pump["on"]   = pumpState;
-  pump["mode"] = pumpAutoMode ? "AUTO" : "MANUAL";
+  pump["mode"] = "AUTOMATIC";
 
   JsonObject water = doc["water"].to<JsonObject>();
   water["distance"] = waterDistanceCm;

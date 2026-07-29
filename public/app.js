@@ -851,29 +851,9 @@ window.PumpControl = (function() {
     }
 
     function applyServerState(isOn, mode) {
-        if (!mode) return;
-        const normMode = String(mode).toLowerCase();
-        state.mode = normMode;
-        const autoBtn = document.getElementById('pump-auto-btn');
-        const manualBtn = document.getElementById('pump-manual-btn');
-        const manualControls = document.getElementById('pump-manual-controls');
+        state.mode = 'auto';
         const modeLabel = document.getElementById('pump-mode-label');
-        const hint = document.querySelector('.wm-pump-hint');
-
-        if (normMode === 'auto') {
-            if (autoBtn) autoBtn.classList.add('active');
-            if (manualBtn) manualBtn.classList.remove('active');
-            if (manualControls) manualControls.style.display = 'none';
-            if (modeLabel) modeLabel.textContent = 'Mode: AUTO (Low -> ON, High -> OFF)';
-            if (hint) hint.style.display = '';
-        } else {
-            if (manualBtn) manualBtn.classList.add('active');
-            if (autoBtn) autoBtn.classList.remove('active');
-            if (manualControls) manualControls.style.display = 'flex';
-            if (modeLabel) modeLabel.textContent = 'Mode: MANUAL (User Switch Control)';
-            if (hint) hint.style.display = 'none';
-        }
-
+        if (modeLabel) modeLabel.textContent = 'Mode: AUTOMATIC (Low ≤ 20% → ON, High ≥ 90% → OFF)';
         if (typeof isOn === 'boolean') {
             setOn(isOn, 'ESP32 telemetry');
         }
