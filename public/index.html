@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="NEXUS HOME — Premium IoT Smart Home Control Center. Monitor and control lights, gate, water tank, pump, and safety sensors from one dashboard.">
+  <title>NEXUS HOME — Smart Home Control Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- BOOT / INTRO SCREEN                            -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div id="boot-screen" class="boot-screen">
+    <div class="boot-content">
+      <div class="boot-logo">
+        <svg viewBox="0 0 100 100" width="80" height="80" class="boot-hex">
+          <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
+                   fill="none" stroke-width="2" class="hex-outer"/>
+          <polygon points="50,20 80,37.5 80,62.5 50,80 20,62.5 20,37.5"
+                   fill="none" stroke-width="1.5" class="hex-inner"/>
+          <circle cx="50" cy="50" r="8" class="hex-core"/>
+        </svg>
+      </div>
+      <h1 class="boot-title" id="boot-title">SMART HOME</h1>
+      <p class="boot-subtitle">Control Center v3.0</p>
+      <div class="boot-progress">
+        <div id="boot-progress-bar" class="boot-progress-bar"></div>
+      </div>
+      <div id="boot-status" class="boot-status"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- MAIN DASHBOARD                                  -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div id="dashboard" class="dashboard" style="display:none; opacity:0;">
+
+    <!-- ─── STICKY NAVIGATION ─── -->
+    <nav id="main-nav" class="main-nav">
+      <div class="nav-inner">
+        <a href="#" class="nav-brand">
+          <svg viewBox="0 0 100 100" width="28" height="28">
+            <polygon points="50,10 90,32.5 90,67.5 50,90 10,67.5 10,32.5"
+                     fill="none" stroke="var(--accent-cyan)" stroke-width="4"/>
+            <circle cx="50" cy="50" r="7" fill="var(--accent-cyan)"/>
+          </svg>
+          <span id="nav-brand-title">SMART HOME</span>
+        </a>
+
+        <div class="nav-center">
+          <div class="nav-status">
+            <span id="system-status-dot" class="status-dot online"></span>
+            <span id="system-status-text" class="status-text">ONLINE</span>
+          </div>
+          <span id="nav-clock" class="nav-clock">--:--:--</span>
+        </div>
+
+        <div class="nav-links" id="nav-links">
+          <a href="#lights" class="nav-link" data-section="lights">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/></svg>
+            <span class="nav-link-text">Lights</span>
+            <span class="nav-badge" id="nav-light-indicator">0/5</span>
+          </a>
+          <a href="#gate" class="nav-link" data-section="gate">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/></svg>
+            <span class="nav-link-text">Gate</span>
+            <span class="nav-badge" id="nav-gate-indicator">CLOSED</span>
+          </a>
+          <a href="#servo" class="nav-link" data-section="servo">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="12" x2="16.5" y2="7.5"/></svg>
+            <span class="nav-link-text">Servo</span>
+            <span class="nav-badge" id="nav-servo-indicator">0°</span>
+          </a>
+          <a href="#water" class="nav-link" data-section="water">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+            <span class="nav-link-text">Water</span>
+            <span class="nav-badge" id="nav-water-indicator">--%</span>
+          </a>
+          <a href="#safety" class="nav-link" data-section="safety">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span class="nav-link-text">Safety</span>
+            <span class="nav-badge safe" id="nav-safety-indicator">OK</span>
+          </a>
+          <a href="#settings" class="nav-link" data-section="settings">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span class="nav-link-text">Settings</span>
+          </a>
+        </div>
+
+        <button id="nav-hamburger" class="nav-hamburger" aria-label="Toggle navigation menu">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Mobile dropdown -->
+    <div id="nav-mobile-menu" class="nav-mobile-menu"></div>
+
+    <!-- ─── MAIN CONTENT ─── -->
+    <main class="dashboard-main">
+
+      <!-- ═══ 1. LIGHT CONTROL ═══ -->
+      <section id="lights" class="dash-section">
+        <div class="section-header scroll-reveal">
+          <div class="section-icon light-accent">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/></svg>
+          </div>
+          <div>
+            <h2>Light Control</h2>
+            <p class="section-subtitle">Manage your home lighting</p>
+          </div>
+        </div>
+        <div id="lights-grid" class="lights-grid">
+          <!-- JS generates 5 light cards -->
+        </div>
+      </section>
+
+      <!-- ═══ 2. SMART GATE ═══ -->
+      <section id="gate" class="dash-section">
+        <div class="section-header scroll-reveal">
+          <div class="section-icon gate-accent">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/></svg>
+          </div>
+          <div>
+            <h2>Smart Gate</h2>
+            <p class="section-subtitle">Gate access control &amp; monitoring</p>
+          </div>
+        </div>
+        <div class="gate-wrapper scroll-reveal">
+          <div class="gate-status-bar">
+            <div class="gate-stat">
+              <span class="gate-stat-label">STATUS</span>
+              <span id="gate-status-text" class="gate-stat-value status-closed">CLOSED</span>
+            </div>
+            <div class="gate-stat">
+              <span class="gate-stat-label">POSITION</span>
+              <span id="gate-position-text" class="gate-stat-value">0%</span>
+            </div>
+          </div>
+
+          <div id="gate-visual" class="gate-visual">
+            <div class="gate-pillar left-pillar">
+              <div class="pillar-light"></div>
+            </div>
+            <div class="gate-track">
+              <div id="gate-door-left" class="gate-door left-door"></div>
+              <div id="gate-door-right" class="gate-door right-door"></div>
+            </div>
+            <div class="gate-pillar right-pillar">
+              <div class="pillar-light"></div>
+            </div>
+            <!-- Safety blocked overlay -->
+            <div id="gate-blocked-overlay" class="gate-blocked-overlay">
+              <span class="gate-blocked-label">⚠ IR BLOCKED — GATE LOCKED</span>
+            </div>
+          </div>
+
+          <div class="gate-controls">
+            <div class="gate-slider-group">
+              <label for="gate-slider" class="control-label">Manual Position</label>
+              <div class="slider-row">
+                <span class="slider-label">0%</span>
+                <input type="range" id="gate-slider" class="styled-range" min="0" max="100" value="0">
+                <span class="slider-label">100%</span>
+              </div>
+            </div>
+            <div class="gate-btn-row">
+              <button id="gate-open-btn" class="action-btn open-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 11 12 6 17 11"/></svg>
+                OPEN
+              </button>
+              <button id="gate-close-btn" class="action-btn close-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/></svg>
+                CLOSE
+              </button>
+            </div>
+            <div class="gate-hold-row">
+              <button id="gate-hold-open" class="hold-btn open-hold">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 11 12 6 17 11"/></svg>
+                HOLD TO OPEN
+              </button>
+              <button id="gate-hold-close" class="hold-btn close-hold">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/></svg>
+                HOLD TO CLOSE
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 2B. SERVO CONTROL ═══ -->
+      <section id="servo" class="dash-section">
+        <div class="section-header scroll-reveal">
+          <div class="section-icon servo-accent">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <div>
+            <h2>Servo 2 (Auxiliary Motor)</h2>
+            <p class="section-subtitle">Optional secondary motor control (GPIO 17)</p>
+          </div>
+        </div>
+        <div class="servo-wrapper scroll-reveal">
+          <div class="servo-layout">
+            <!-- Visual -->
+            <div class="servo-visual-area">
+              <div class="servo-gauge">
+                <svg viewBox="0 0 200 120" class="servo-arc-svg">
+                  <!-- Track arc -->
+                  <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="var(--bg-tertiary)" stroke-width="8" stroke-linecap="round"/>
+                  <!-- Active arc (clipped by JS) -->
+                  <path id="servo-arc-active" d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="var(--accent-purple)" stroke-width="8" stroke-linecap="round" stroke-dasharray="251.2" stroke-dashoffset="251.2"/>
+                  <!-- Needle -->
+                  <line id="servo-needle" x1="100" y1="110" x2="100" y2="35" stroke="var(--accent-cyan)" stroke-width="3" stroke-linecap="round" transform="rotate(-90, 100, 110)"/>
+                  <!-- Center dot -->
+                  <circle cx="100" cy="110" r="6" fill="var(--accent-cyan)"/>
+                  <!-- Tick marks at 0, 45, 90, 135, 180 -->
+                  <text x="12" y="108" fill="var(--text-dim)" font-size="10" font-family="JetBrains Mono">0°</text>
+                  <text x="38" y="48" fill="var(--text-dim)" font-size="10" font-family="JetBrains Mono">45°</text>
+                  <text x="90" y="22" fill="var(--text-dim)" font-size="10" font-family="JetBrains Mono">90°</text>
+                  <text x="145" y="48" fill="var(--text-dim)" font-size="10" font-family="JetBrains Mono">135°</text>
+                  <text x="164" y="108" fill="var(--text-dim)" font-size="10" font-family="JetBrains Mono">180°</text>
+                </svg>
+                <div class="servo-angle-display">
+                  <span id="servo-angle-value" class="servo-angle-num">0</span>
+                  <span class="servo-angle-unit">°</span>
+                </div>
+              </div>
+            </div>
+            <!-- Controls -->
+            <div class="servo-controls-area">
+              <div class="servo-power-row">
+                <span class="servo-label">Power</span>
+                <div class="servo-power-group">
+                  <span class="servo-power-status" id="servo-power-status">OFF</span>
+                  <label class="toggle-wrap" id="servo-toggle-wrap">
+                    <input type="checkbox" class="toggle-input" id="servo-power-toggle">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="servo-slider-group">
+                <label for="servo-slider" class="control-label">Angle Position</label>
+                <div class="slider-row">
+                  <span class="slider-label">0°</span>
+                  <input type="range" id="servo-slider" class="styled-range servo-range" min="0" max="180" value="0" disabled>
+                  <span class="slider-label">180°</span>
+                </div>
+              </div>
+              <div class="servo-preset-row">
+                <button class="servo-preset-btn" data-angle="0">0°</button>
+                <button class="servo-preset-btn" data-angle="45">45°</button>
+                <button class="servo-preset-btn" data-angle="90">90°</button>
+                <button class="servo-preset-btn" data-angle="135">135°</button>
+                <button class="servo-preset-btn" data-angle="180">180°</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 3. WATER MANAGEMENT ═══ -->
+      <section id="water" class="dash-section">
+        <div class="section-header scroll-reveal">
+          <div class="section-icon water-accent">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+          </div>
+          <div>
+            <h2>Water Management</h2>
+            <p class="section-subtitle">Tank monitoring &amp; pump control</p>
+          </div>
+        </div>
+
+        <div class="wm-layout">
+          <!-- LEFT COLUMN: Tank + Data -->
+          <div class="wm-col-tank">
+            <!-- Tank Visual -->
+            <div class="wm-tank-card glass-card scroll-reveal">
+              <div class="wm-tank-container">
+                <!-- Vertical Ruler Scale (Left side) -->
+                <div class="wm-ruler-scale">
+                  <div class="wm-ruler-mark" style="bottom:100%"><span>100%</span></div>
+                  <div class="wm-ruler-mark" style="bottom:90%"><span>90%</span></div>
+                  <div class="wm-ruler-mark" style="bottom:80%"><span>80%</span></div>
+                  <div class="wm-ruler-mark" style="bottom:70%"><span>70%</span></div>
+                  <div class="wm-ruler-mark" style="bottom:60%"><span>60%</span></div>
+                  <div class="wm-ruler-mark" style="bottom:50%"><span>50%</span></div>
+                  <div class="wm-ruler-mark" style="bottom:40%"><span>40%</span></div>
+                  <div class="wm-ruler-mark" style="bottom:30%"><span>30%</span></div>
+                  <div class="wm-ruler-mark" style="bottom:20%"><span>20%</span></div>
+                  <div class="wm-ruler-mark" style="bottom:10%"><span>10%</span></div>
+                  <div class="wm-ruler-mark" style="bottom:0%"><span>0%</span></div>
+                </div>
+
+                <div class="wm-tank-wrapper">
+                  <!-- Sensor icon & Inlet Pipe at top -->
+                  <div class="wm-sensor-mount">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span class="sensor-mount-label">HC-SR04</span>
+                  </div>
+                  <!-- Top Water Inlet Pipe -->
+                  <div class="wm-inlet-pipe">
+                    <div id="wm-water-stream" class="wm-water-stream" style="display:none;"></div>
+                  </div>
+                  <div class="wm-tank-body">
+                    <!-- Glass specular reflection -->
+                    <div class="wm-tank-glass-sheen"></div>
+                    <div class="wm-tank-glass-highlight"></div>
+                    <!-- Tick marks inside tank -->
+                    <div class="wm-tick-marks">
+                      <div class="wm-tick" style="bottom:75%"><span>75%</span></div>
+                      <div class="wm-tick" style="bottom:50%"><span>50%</span></div>
+                      <div class="wm-tick" style="bottom:25%"><span>25%</span></div>
+                    </div>
+                    <!-- Water fill -->
+                    <div id="tank-water" class="wm-water-fill" style="height:0%">
+                      <div class="wm-wave w1"></div>
+                      <div class="wm-wave w2"></div>
+                      <div class="wm-wave w3"></div>
+                      <!-- Animated rising bubbles -->
+                      <div class="wm-bubble b1"></div>
+                      <div class="wm-bubble b2"></div>
+                      <div class="wm-bubble b3"></div>
+                      <div class="wm-bubble b4"></div>
+                      <div class="wm-bubble b5"></div>
+                    </div>
+                  </div>
+                  <!-- Tank base & Bottom Drain Valve -->
+                  <div class="wm-tank-base">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+                    <span class="wm-base-text">JDT INDUSTRIAL TANK</span>
+                  </div>
+                  <div class="wm-drain-valve"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Data readouts row -->
+            <div class="wm-data-row scroll-reveal">
+              <!-- Water Level big display -->
+              <div class="wm-data-main glass-card">
+                <span class="wm-data-label">WATER LEVEL</span>
+                <div class="wm-lcd-display">
+                  <span id="water-percent" class="wm-lcd-value">0.0</span>
+                  <span class="wm-lcd-unit">%</span>
+                </div>
+              </div>
+            </div>
+            <div class="wm-data-grid scroll-reveal">
+              <div class="wm-data-cell glass-card">
+                <span class="wm-data-label">DISTANCE</span>
+                <div class="wm-lcd-display small">
+                  <span id="sensor-distance" class="wm-lcd-value">0.0</span>
+                  <span class="wm-lcd-unit">cm</span>
+                </div>
+              </div>
+              <div class="wm-data-cell glass-card">
+                <span class="wm-data-label">TANK DEPTH</span>
+                <div class="wm-lcd-display small">
+                  <span id="tank-depth-display" class="wm-lcd-value">100</span>
+                  <span class="wm-lcd-unit">cm</span>
+                </div>
+              </div>
+            </div>
+            <div class="wm-data-row scroll-reveal">
+              <div class="wm-data-cell glass-card" style="width:100%">
+                <span class="wm-data-label">WATER HEIGHT</span>
+                <div class="wm-lcd-display small">
+                  <span id="water-height" class="wm-lcd-value">0.0</span>
+                  <span class="wm-lcd-unit">cm</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN: Pump Control + Graph -->
+          <div class="wm-col-controls">
+            <!-- Pump Control -->
+            <div class="wm-pump-card glass-card scroll-reveal">
+              <div class="wm-pump-header">
+                <div class="wm-pump-title-row">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  <div>
+                    <h3>Pump Control</h3>
+                    <span class="wm-pump-mode-label" id="pump-mode-label">Mode: AUTO</span>
+                  </div>
+                </div>
+              </div>
+              <div class="wm-pump-mode-tabs">
+                <button id="pump-auto-btn" class="wm-pump-tab active" data-mode="auto">AUTO</button>
+                <button id="pump-manual-btn" class="wm-pump-tab" data-mode="manual">MANUAL</button>
+              </div>
+              <div class="wm-pump-status-row">
+                <div class="wm-pump-motor-info">
+                  <span class="wm-pump-motor-label">Motor Pump</span>
+                  <span class="wm-pump-motor-state" id="pump-status-text">OFF</span>
+                </div>
+                <div class="wm-pump-toggle-area">
+                  <span class="pump-dot" id="pump-dot"></span>
+                  <div class="pump-status-pill" id="pump-status-pill" style="display:none"></div>
+                  <span id="pump-mini-status" style="display:none">OFF</span>
+                </div>
+              </div>
+              <div id="pump-manual-controls" class="wm-pump-manual" style="display:none;">
+                <button id="pump-power-btn" class="wm-pump-power-btn off">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+                  <span>TURN ON</span>
+                </button>
+              </div>
+              <p class="wm-pump-hint">Pump is controlled automatically based on thresholds</p>
+            </div>
+
+            <!-- Level History Graph -->
+            <div class="wm-graph-card glass-card scroll-reveal">
+              <div class="wm-graph-header">
+                <div class="wm-graph-title-row">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  <div>
+                    <h3>Level History</h3>
+                    <span class="wm-graph-subtitle">Real-time water level graph</span>
+                  </div>
+                </div>
+                <span class="card-badge">● LIVE</span>
+              </div>
+              <div class="wm-chart-wrap">
+                <canvas id="water-chart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 4. SAFETY MONITORING ═══ -->
+      <section id="safety" class="dash-section">
+        <div class="section-header scroll-reveal">
+          <div class="section-icon safety-accent">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <h2>Safety Monitoring</h2>
+            <p class="section-subtitle">Environmental sensor status</p>
+          </div>
+        </div>
+        <div class="safety-grid">
+          <!-- IR Sensor -->
+          <div id="ir-sensor-card" class="sensor-card glass-card scroll-reveal" data-sensor="ir">
+            <div class="sensor-icon-wrap ir-accent">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+            <h3 class="sensor-name">IR Motion Sensor</h3>
+            <div class="sensor-reading">
+              <span class="sensor-dot safe" id="ir-sensor-dot"></span>
+              <span class="sensor-value" id="ir-sensor-status">No Motion</span>
+            </div>
+            <div class="sensor-bar-wrap">
+              <div class="sensor-bar" id="ir-sensor-bar" style="width:10%"></div>
+            </div>
+            <span class="sensor-state-label" id="ir-state-label">SAFE</span>
+          </div>
+          <!-- Gas Sensor -->
+          <div id="gas-sensor-card" class="sensor-card glass-card scroll-reveal" data-sensor="gas">
+            <div class="sensor-icon-wrap gas-accent">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8l4 10H4L8 2z"/><path d="M12 12v6"/><path d="M8 22h8"/><path d="M7 12a5 5 0 0 0 10 0"/></svg>
+            </div>
+            <h3 class="sensor-name">Gas Sensor</h3>
+            <div class="sensor-reading">
+              <span class="sensor-dot safe" id="gas-sensor-dot"></span>
+              <span class="sensor-value" id="gas-sensor-status">Normal</span>
+            </div>
+            <div class="sensor-bar-wrap">
+              <div class="sensor-bar" id="gas-sensor-bar" style="width:15%"></div>
+            </div>
+            <span class="sensor-state-label" id="gas-state-label">SAFE</span>
+          </div>
+          <!-- Flame Sensor -->
+          <div id="flame-sensor-card" class="sensor-card glass-card scroll-reveal" data-sensor="flame">
+            <div class="sensor-icon-wrap flame-accent">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c-4.97 0-9-2.69-9-6 0-2.16 1.34-4.12 3.42-5.37A4.001 4.001 0 0 1 12 2a4.001 4.001 0 0 1 5.58 8.63C19.66 11.88 21 13.84 21 16c0 3.31-4.03 6-9 6z"/></svg>
+            </div>
+            <h3 class="sensor-name">Flame Sensor</h3>
+            <div class="sensor-reading">
+              <span class="sensor-dot safe" id="flame-sensor-dot"></span>
+              <span class="sensor-value" id="flame-sensor-status">No Flame</span>
+            </div>
+            <div class="sensor-bar-wrap">
+              <div class="sensor-bar" id="flame-sensor-bar" style="width:5%"></div>
+            </div>
+            <span class="sensor-state-label" id="flame-state-label">SAFE</span>
+          </div>
+        </div>
+        <!-- Demo trigger buttons for testing -->
+        <div class="safety-demo-row">
+          <button class="safety-demo-btn ir" onclick="window.SafetyMonitor && SafetyMonitor.demo('ir','safe')">IR: Safe</button>
+          <button class="safety-demo-btn ir" onclick="window.SafetyMonitor && SafetyMonitor.demo('ir','warning')">IR: Motion</button>
+          <button class="safety-demo-btn ir" onclick="window.SafetyMonitor && SafetyMonitor.demo('ir','danger')">IR: Intruder</button>
+          <button class="safety-demo-btn gas" onclick="window.SafetyMonitor && SafetyMonitor.demo('gas','safe')">Gas: Safe</button>
+          <button class="safety-demo-btn gas" onclick="window.SafetyMonitor && SafetyMonitor.demo('gas','danger')">Gas: Danger</button>
+          <button class="safety-demo-btn flame" onclick="window.SafetyMonitor && SafetyMonitor.demo('flame','safe')">Flame: Safe</button>
+          <button class="safety-demo-btn flame" onclick="window.SafetyMonitor && SafetyMonitor.demo('flame','danger')">Flame: FIRE</button>
+        </div>
+      </section>
+
+      <!-- ═══ 5. SETTINGS ═══ -->
+      <section id="settings" class="dash-section">
+        <div class="section-header scroll-reveal">
+          <div class="section-icon settings-accent">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </div>
+          <div>
+            <h2>System Settings</h2>
+            <p class="section-subtitle">Configure tank &amp; sensor parameters</p>
+          </div>
+        </div>
+        <div class="settings-grid scroll-reveal">
+          <div class="setting-card glass-card">
+            <label for="setting-dash-name" class="setting-label">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Dashboard Name
+            </label>
+            <input type="text" id="setting-dash-name" class="setting-input" value="Smart Home" maxlength="40">
+          </div>
+          <div class="setting-card glass-card">
+            <label for="setting-tank-depth" class="setting-label">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M4 10h16"/></svg>
+              Tank Depth (cm)
+            </label>
+            <input type="number" id="setting-tank-depth" class="setting-input" value="150" min="10" max="1000">
+          </div>
+          <div class="setting-card glass-card">
+            <label for="setting-sensor-offset" class="setting-label">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+              Sensor Offset (cm)
+            </label>
+            <input type="number" id="setting-sensor-offset" class="setting-input" value="5" min="0" max="100">
+          </div>
+          <div class="setting-card glass-card">
+            <label for="setting-low-threshold" class="setting-label">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Low Water Threshold (%)
+            </label>
+            <input type="number" id="setting-low-threshold" class="setting-input" value="20" min="0" max="95">
+          </div>
+          <div class="setting-card glass-card">
+            <label for="setting-high-threshold" class="setting-label">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              High Water Threshold (%)
+            </label>
+            <input type="number" id="setting-high-threshold" class="setting-input" value="90" min="5" max="100">
+          </div>
+          <!-- Sound Alert Mute Setting -->
+          <div class="setting-card glass-card">
+            <label for="setting-sound-toggle" class="setting-label">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              Alert Sounds
+            </label>
+            <div class="servo-power-group" style="justify-content: space-between; margin-top: 6px;">
+              <span id="sound-status-text" style="font-family:'JetBrains Mono',monospace; font-size:0.8rem; color:var(--success); font-weight:700;">ENABLED</span>
+              <label class="toggle-wrap">
+                <input type="checkbox" class="toggle-input" id="setting-sound-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="setting-actions">
+            <button id="settings-save-btn" class="action-btn save-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Save Settings
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 6. SYSTEM LOGS & ALERT HISTORY ═══ -->
+      <section id="timeline" class="dash-section">
+        <div class="timeline-grid">
+          <!-- LEFT: Activity Timeline -->
+          <div class="timeline-col">
+            <div class="section-header scroll-reveal">
+              <div class="section-icon timeline-accent">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div>
+                <h2>Activity Timeline</h2>
+                <p class="section-subtitle">Recent system events</p>
+              </div>
+            </div>
+            <div class="timeline-card glass-card scroll-reveal">
+              <div id="activity-timeline" class="activity-timeline">
+                <!-- JS populates timeline items -->
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT: Alert History Panel -->
+          <div class="timeline-col">
+            <div class="section-header scroll-reveal">
+              <div class="section-icon safety-accent">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <div>
+                <h2>Alert History</h2>
+                <p class="section-subtitle">Stored log (Last 100 alerts)</p>
+              </div>
+              </div>
+            </div>
+            <div class="alert-history-card glass-card scroll-reveal">
+              <div class="alert-history-filters">
+                <button class="alert-filter-btn active" data-filter="all">ALL</button>
+                <button class="alert-filter-btn" data-filter="info">INFO</button>
+                <button class="alert-filter-btn" data-filter="warning">WARN</button>
+                <button class="alert-filter-btn" data-filter="danger">DANGER</button>
+                <button class="alert-filter-btn" data-filter="emergency">EMERGENCY</button>
+              </div>
+              <div id="alert-history-list" class="alert-history-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ─── FOOTER ─── -->
+    <footer class="dashboard-footer">
+      <div class="footer-inner">
+        <span id="footer-brand-title">SMART HOME v3.0</span>
+        <span class="footer-sep">·</span>
+        <span>Powered by <a href="https://youtube.com/@easyelectrotech7743" target="_blank" rel="noopener">Easy Electro Tech</a></span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ─── TOAST NOTIFICATION STACK (TOP-RIGHT) ─── -->
+  <div id="toast-container" class="toast-container"></div>
+  <div id="toast" class="toast"></div>
+
+  <!-- ─── IR GATE SAFETY ALERT MODAL ─── -->
+  <div id="safety-modal" class="safety-modal" role="dialog" aria-modal="true" aria-labelledby="safety-modal-title">
+    <div class="safety-modal-backdrop"></div>
+    <div class="safety-modal-panel">
+      <!-- Animated warning header -->
+      <div class="safety-modal-header">
+        <div class="safety-modal-icon-wrap">
+          <div class="safety-modal-pulse-ring"></div>
+          <div class="safety-modal-pulse-ring delay1"></div>
+          <svg class="safety-modal-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </div>
+        <div>
+          <h2 id="safety-modal-title" class="safety-modal-title">IR MOTION DETECTED</h2>
+          <p class="safety-modal-subtitle">Gate Safety Validation Required</p>
+        </div>
+      </div>
+
+      <!-- Alert details -->
+      <div class="safety-modal-body">
+        <div class="safety-modal-reason">
+          <span class="safety-modal-reason-label">ALERT REASON</span>
+          <span class="safety-modal-reason-text" id="safety-modal-reason">Object or person detected near gate</span>
+        </div>
+        <div class="safety-modal-sensor-row">
+          <div class="safety-modal-sensor-item">
+            <div class="sms-dot ir-dot" id="sms-ir-dot"></div>
+            <span>IR Sensor</span>
+            <span class="sms-val" id="sms-ir-val">TRIGGERED</span>
+          </div>
+          <div class="safety-modal-sensor-item">
+            <div class="sms-dot gas-dot" id="sms-gas-dot"></div>
+            <span>Gas</span>
+            <span class="sms-val" id="sms-gas-val">OK</span>
+          </div>
+          <div class="safety-modal-sensor-item">
+            <div class="sms-dot flame-dot" id="sms-flame-dot"></div>
+            <span>Flame</span>
+            <span class="sms-val" id="sms-flame-val">OK</span>
+          </div>
+        </div>
+        <div class="safety-modal-warning-note">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>Final hardware safety authority rests with the ESP32. This is a frontend validation layer only.</span>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="safety-modal-actions">
+        <button id="safety-modal-reject" class="safety-btn reject-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          REJECT — KEEP CLOSED
+        </button>
+        <button id="safety-modal-accept" class="safety-btn accept-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          ACCEPT — OPEN GATE
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── SYSTEM DANGER BANNER ─── -->
+  <div id="danger-banner" class="danger-banner" style="display:none">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span id="danger-banner-text">SYSTEM ALERT — Dangerous conditions detected</span>
+    <button id="danger-banner-close" class="danger-banner-close" aria-label="Dismiss">✕</button>
+  </div>
+
+  <!-- ─── SCRIPTS ─── -->
+  <script src="app.js"></script>
+  <script src="esp32-ws.js"></script>
+</body>
+</html>
