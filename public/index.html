@@ -205,6 +205,15 @@
           </div>
         </div>
 
+        <div class="setting-group">
+          <label><i data-lucide="gauge"></i> Servo Movement Glide Speed (ms/deg)</label>
+          <p class="setting-desc">Adjust servo gliding speed (5ms = Fast, 20ms = Normal Smooth, 50ms = Ultra Slow & Silky).</p>
+          <div class="slider-row">
+            <input type="range" id="input-servo-speed" class="range-slider" min="5" max="50" value="20" step="1">
+            <span class="range-val" id="servo-speed-val">20 ms</span>
+          </div>
+        </div>
+
         <!-- Security Settings (Change Password) -->
         <div class="setting-group border-top">
           <label class="section-title"><i data-lucide="lock"></i> Change Web Password</label>

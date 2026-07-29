@@ -223,6 +223,17 @@ modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) m
 inputLow.addEventListener('input', () => { lowVal.textContent = inputLow.value + '%'; });
 inputHigh.addEventListener('input', () => { highVal.textContent = inputHigh.value + '%'; });
 
+const inputServoSpeed = document.getElementById('input-servo-speed');
+const servoSpeedVal = document.getElementById('servo-speed-val');
+if (inputServoSpeed && servoSpeedVal) {
+  inputServoSpeed.addEventListener('input', () => {
+    servoSpeedVal.textContent = inputServoSpeed.value + ' ms';
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'servo_speed', speed: parseInt(inputServoSpeed.value) }));
+    }
+  });
+}
+
 // Save configurations & settings
 btnSave.addEventListener('click', async () => {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;

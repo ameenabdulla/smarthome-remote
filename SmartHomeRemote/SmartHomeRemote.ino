@@ -1,15 +1,15 @@
 /*
  * ======================================================================================
- * SMART HOME REMOTE — MASTER FIRMWARE (ULTRA-SMOOTH GATE SERVO & AUX SERVO INTERPOLATION)
+ * SMART HOME REMOTE — MASTER FIRMWARE (DYNAMIC SERVO SPEED SLIDER & ULTRA-SMOOTH GLIDE)
  * Hardware Pinout:
  *   - Smart Light Relays (5 Channels): GPIO 13, 14, 27, 26, 33 (Active-LOW)
  *   - Auto Pump Relay: GPIO 25 (Active-LOW: ON <= 20%, OFF >= 90%)
- *   - Gate Servo: GPIO 18 (PWM Servo drive — Ultra-Smooth Glide)
- *   - Aux Servo: GPIO 17 (PWM Servo drive — Ultra-Smooth Glide)
+ *   - Gate Servo: GPIO 18 (PWM Servo drive — Ultra-Smooth Adjustable Speed)
+ *   - Aux Servo: GPIO 17 (PWM Servo drive — Ultra-Smooth Adjustable Speed)
  *   - Ultrasonic Sensor: GPIO 5 (Trig), GPIO 4 (Echo)
  *   - Digital Gas Sensor (MQ DO): GPIO 32 (Input: Active-LOW)
  *   - Digital Flame Sensor (DO): GPIO 35 (Input: Active-LOW)
- *   - Digital IR Motion Sensor: GPIO 34 (Input: Active-LOW)
+ *   - Digital IR Motion Sensor: GPIO 34 (Input: Active-LOW -> Moves Gate 90°)
  *   - Active Alarm Buzzer: GPIO 19 (Output: Active-HIGH)
  *   - I2C LCD Display (16x2): GPIO 21 (SDA), GPIO 22 (SCL), Address 0x27
  * ======================================================================================
@@ -24,8 +24,8 @@
 #include <LiquidCrystal_I2C.h>
 
 // WiFi & Remote WebSocket Server
-const char* WIFI_SSID = "Airtel_juma_8616";
-const char* WIFI_PASS = "air38725";
+const char* WIFI_SSID = "Admin";
+const char* WIFI_PASS = "admin1234";
 
 const char* WS_HOST = "smarthome-remote.onrender.com";
 const uint16_t WS_PORT = 443;
@@ -54,12 +54,15 @@ float autoPumpOff  = 90.0f; // OFF when >= 90%
 bool lightStates[5]   = {false, false, false, false, false};
 bool pumpState        = false;
 
-// ── Ultra-Smooth Servo Movement Variables ──
+// ── Ultra-Smooth Dynamic Servo Speed Variables (Zero Jerking) ──
 int targetGateAngle   = 0;
 int currentGateAngle  = 0;
 
 int targetAuxAngle    = 0;
 int currentAuxAngle   = 0;
+
+// Dynamic Speed Control (ms per degree: Default 20ms, range 5ms - 50ms)
+int servoStepDelayMs  = 20;
 
 float waterDistanceCm = 0.0f;
 float waterPercentage = 0.0f;
@@ -79,15 +82,15 @@ Servo            auxServo;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // ─────────────────────────────────────────────
-// Smooth Servo Interpolation Engine (0 Snap / 0 Jitter)
+// Dynamic Ultra-Smooth Servo Interpolation Engine
 // ─────────────────────────────────────────────
 void updateSmoothServos() {
   static unsigned long lastGateStep = 0;
   static unsigned long lastAuxStep  = 0;
   unsigned long now = millis();
 
-  // Smooth Gate Servo Glide (15ms per degree = 1.35s full movement)
-  if (now - lastGateStep >= 15) {
+  // Dynamic Gate Servo Glide
+  if (now - lastGateStep >= (unsigned long)servoStepDelayMs) {
     lastGateStep = now;
     if (currentGateAngle < targetGateAngle) {
       currentGateAngle++;
@@ -98,8 +101,8 @@ void updateSmoothServos() {
     }
   }
 
-  // Smooth Aux Servo Glide
-  if (now - lastAuxStep >= 15) {
+  // Dynamic Aux Servo Glide
+  if (now - lastAuxStep >= (unsigned long)servoStepDelayMs) {
     lastAuxStep = now;
     if (currentAuxAngle < targetAuxAngle) {
       currentAuxAngle++;
@@ -134,7 +137,7 @@ void checkSafetyAndSensors() {
   waterDistanceCm = getRawDistance();
   waterPercentage = calculateLevelPercent(waterDistanceCm);
 
-  // Digital Sensor Readings (Active LOW: LOW = Hazard Detected)
+  // Digital Sensor Readings (Active LOW: LOW = Hazard/Motion Detected)
   gasDetected   = (digitalRead(GAS_SENSOR_PIN) == LOW);
   flameDetected = (digitalRead(FLAME_SENSOR_PIN) == LOW);
   irDetected    = (digitalRead(IR_SENSOR_PIN) == LOW);
@@ -154,25 +157,32 @@ void checkSafetyAndSensors() {
     }
   }
 
-  // 2. Emergency Hazard Action (Gas or Flame Detected)
+  // 2. IR Sensor Automatic Gate Trigger (Moves Gate 90° Smoothly)
+  if (irDetected || gasDetected || flameDetected) {
+    if (targetGateAngle != 90) {
+      targetGateAngle = 90;
+      Serial.println("[IR / SAFETY TRIGGER] Object/Motion Detected -> GATE SMOOTH OPEN 90°");
+    }
+  } else {
+    // When IR and hazards are clear, close gate smoothly
+    if (targetGateAngle != 0) {
+      targetGateAngle = 0;
+      Serial.println("[IR CLEAR] Path Clear -> GATE SMOOTH CLOSE 0°");
+    }
+  }
+
+  // 3. Emergency Hazard Alarm (Gas or Flame Detected)
   if (gasDetected || flameDetected) {
-    // Sound Alarm Buzzer (BEEP BEEP Pattern)
     if (millis() - lastBlinkTime >= 150) {
       lastBlinkTime = millis();
       buzzerState = !buzzerState;
       digitalWrite(BUZZER_PIN, buzzerState ? HIGH : LOW);
     }
-
-    // Emergency Evacuation: Smoothly OPEN Gate to 90 degrees!
-    if (targetGateAngle != 90) {
-      targetGateAngle = 90;
-      Serial.println("[HAZARD ALERT] Emergency Evacuation -> GATE SMOOTH OPENING!");
-    }
   } else {
     digitalWrite(BUZZER_PIN, LOW); // Silence Buzzer when safe
   }
 
-  // 3. Update 16x2 I2C LCD Display
+  // 4. Update 16x2 I2C LCD Display
   if (hasLCD) {
     lcd.setCursor(0, 0);
     if (flameDetected) {
@@ -189,7 +199,9 @@ void checkSafetyAndSensors() {
 
     lcd.setCursor(0, 1);
     if (gasDetected || flameDetected) {
-      lcd.print("GATE OPENED ALARM");
+      lcd.print("GATE EMERGENCY 90");
+    } else if (irDetected) {
+      lcd.print("IR AUTO GATE 90 ");
     } else {
       lcd.print(pumpState ? "PUMP: RUNNING   " : "PUMP: STOPPED   ");
     }
@@ -220,6 +232,7 @@ void sendState() {
 
   JsonObject servo = doc["servo"].to<JsonObject>();
   servo["angle"] = currentAuxAngle;
+  servo["speed"] = servoStepDelayMs;
 
   JsonObject safety = doc["safety"].to<JsonObject>();
   safety["gas"]   = gasDetected ? 1 : 0;
@@ -273,6 +286,15 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
         if (doc.containsKey("angle")) {
           targetAuxAngle = constrain(doc["angle"].as<int>(), 0, 180);
         }
+        if (doc.containsKey("speed")) {
+          servoStepDelayMs = constrain(doc["speed"].as<int>(), 5, 50);
+        }
+        sendState();
+      }
+      else if (typeStr == "servo_speed") {
+        if (doc.containsKey("speed")) {
+          servoStepDelayMs = constrain(doc["speed"].as<int>(), 5, 50);
+        }
         sendState();
       }
       else if (typeStr == "settings" || typeStr == "config") {
@@ -280,6 +302,7 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
         if (doc.containsKey("highThreshold")) autoPumpOff  = doc["highThreshold"].as<float>();
         if (doc.containsKey("tankDepth"))     tankDepthCm  = doc["tankDepth"].as<float>();
         if (doc.containsKey("sensorOffset"))  sensorOffset = doc["sensorOffset"].as<float>();
+        if (doc.containsKey("servoSpeed"))   servoStepDelayMs = constrain(doc["servoSpeed"].as<int>(), 5, 50);
         sendState();
       }
       break;
@@ -291,7 +314,7 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("\n=== SMART HOME REMOTE — ULTRA-SMOOTH GATE SERVO FIRMWARE ===");
+  Serial.println("\n=== SMART HOME REMOTE — DYNAMIC SERVO SPEED FIRMWARE ===");
 
   // Relays Setup (Active-LOW: HIGH = OFF)
   for (int i = 0; i < 5; i++) {
@@ -329,7 +352,7 @@ void setup() {
     hasLCD = true;
     lcd.init(); lcd.backlight(); lcd.clear();
     lcd.print("Smart Home IoT");
-    lcd.setCursor(0, 1); lcd.print("Smooth Gate Active");
+    lcd.setCursor(0, 1); lcd.print("Speed Servo Mode");
   }
 
   // Immediate sensor check on boot
@@ -352,16 +375,16 @@ void setup() {
 void loop() {
   webSocket.loop();
 
-  // 1. Ultra-smooth servo gliding engine (runs on every tick)
+  // 1. Dynamic Smooth Servo Gliding Engine (Custom speed step timing)
   updateSmoothServos();
 
-  // 2. Sensor & Safety check every 150ms (non-blocking)
-  if (millis() - lastSensorRead >= 150) {
+  // 2. Sensor & Safety Check every 100ms
+  if (millis() - lastSensorRead >= 100) {
     lastSensorRead = millis();
     checkSafetyAndSensors();
   }
 
-  // 3. Telemetry broadcast to web dashboard every 250ms
+  // 3. Telemetry Broadcast every 250ms
   if (millis() - lastTelemetryTime >= 250) {
     lastTelemetryTime = millis();
     sendState();
