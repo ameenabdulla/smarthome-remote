@@ -1,8 +1,8 @@
 /*
  * ======================================================================================
- * SMART HOME IoT — RENDER.COM REMOTE VERSION
+ * JDT WATER TANK CONTROLLER — RENDER.COM REMOTE VERSION
  * ESP32 connects to home WiFi → Render.com WebSocket server → controlled from anywhere
- * Hardware: 5x Relays, Pump Relay, 2x Servos, HC-SR04 Ultrasonic, IR Sensor, I2C LCD
+ * Hardware: HC-SR04 Ultrasonic (GPIO 5 Trig, GPIO 4 Echo), Relay (GPIO 25), I2C LCD (21,22)
  * ======================================================================================
  */
 
@@ -10,7 +10,6 @@
 #include <WiFi.h>
 #include <WebSocketsClient.h>   // CLIENT (connects to Render.com)
 #include <ArduinoJson.h>
-#include <ESP32Servo.h>
 #include <Preferences.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -22,73 +21,63 @@ const char* WIFI_SSID = "Airtel_juma_8616";
 const char* WIFI_PASS = "air38725";
 
 // ─────────────────────────────────────────────
-// Render.com Server  (name your service exactly: juma-smarthome)
+// Render.com Server
 // ─────────────────────────────────────────────
 const char* WS_HOST = "smarthome-remote.onrender.com";
 const uint16_t WS_PORT = 443;
 const char* WS_PATH = "/device";
 
 // ─────────────────────────────────────────────
+// Tank Configuration
+// ─────────────────────────────────────────────
+const float TANK_DEPTH_CM = 100.0f;
+const float SENSOR_OFFSET = 25.0f;
+const float AUTO_PUMP_ON  = 20.0f;  // Turn ON when <= 20%
+const float AUTO_PUMP_OFF = 90.0f;  // Turn OFF when >= 90%
+
+// ─────────────────────────────────────────────
 // Hardware Pins
 // ─────────────────────────────────────────────
-static const uint8_t RELAY_LIGHTS[5] = { 26, 27, 14, 19, 13 };
-static const uint8_t RELAY_PUMP      = 25;
-static const uint8_t MOTOR_IN1       = 32;
-static const uint8_t MOTOR_IN2       = 33;
-static const uint8_t SERVO_PIN       = 18;
-static const uint8_t SERVO2_PIN      = 17;
-static const uint8_t TRIG_PIN        = 5;
-static const uint8_t ECHO_PIN        = 4;
-static const uint8_t IR_PIN          = 35;
+static const uint8_t RELAY_PUMP = 25;  // Active-LOW Relay
+static const uint8_t TRIG_PIN   = 5;   // Ultrasonic Trig
+static const uint8_t ECHO_PIN   = 4;   // Ultrasonic Echo
 
-// I2C LCD  (SDA=21, SCL=22)
+// I2C LCD (SDA=21, SCL=22)
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // ─────────────────────────────────────────────
-// System State
+// State Variables
 // ─────────────────────────────────────────────
-bool  lightStates[5] = {false, false, false, false, false};
-bool  pumpState      = false;
-bool  pumpAutoMode   = true;
-int   servoAngle     = 0;
-int   servo2Angle    = 0;
-int   waterDepth     = 100;
-int   waterOffset    = 5;
-int   lowThreshold   = 20;
-int   highThreshold  = 90;
+bool  pumpState    = false;
+bool  pumpAutoMode = true;
 
-int   waterDistanceCm = 0;
-int   waterHeightCm   = 0;
-int   waterPercentage = 0;
-bool  irDetected      = false;
-unsigned long irDetectTimeSec = 0;
-bool  hasLCD          = false;
+float smoothedDistance = 0.0f;
+float waterPercentage  = 0.0f;
+float waterDistanceCm  = 0.0f;
+bool  hasLCD           = false;
 
-// ─────────────────────────────────────────────
-// Timers
-// ─────────────────────────────────────────────
-unsigned long lastBroadcast      = 0;
-unsigned long lastSensorRead     = 0;
-unsigned long lastWifiCheck      = 0;
-unsigned long lastWsPing         = 0;
-unsigned long gateAutoCloseTime  = 0;
+unsigned long lastTelemetryTime = 0;
+unsigned long lastSensorRead    = 0;
+unsigned long lastWifiCheck     = 0;
 
-// ─────────────────────────────────────────────
-// Ultrasonic — FreeRTOS on Core 0
-// ─────────────────────────────────────────────
-float             smoothedDistance = 0.0f;
-SemaphoreHandle_t ultraMutex       = NULL;
+// FreeRTOS Mutex for Ultrasonic Reading
+SemaphoreHandle_t ultraMutex = NULL;
 
-// ─────────────────────────────────────────────
-// Objects
-// ─────────────────────────────────────────────
 WebSocketsClient  webSocket;
 Preferences       prefs;
-Servo             gateServo;
-Servo             servo2;
 
 // ─────────────────────────────────────────────
-// Ultrasonic Task (Core 0) — never blocks main loop
+// Distance to percentage calculation
+// ─────────────────────────────────────────────
+float toPercent(float dist) {
+  float waterLevel = TANK_DEPTH_CM - (dist - SENSOR_OFFSET);
+  if (waterLevel < 0.0f) waterLevel = 0.0f;
+  if (waterLevel > TANK_DEPTH_CM) waterLevel = TANK_DEPTH_CM;
+  return (waterLevel / TANK_DEPTH_CM) * 100.0f;
+}
+
+// ─────────────────────────────────────────────
+// Ultrasonic Task (Core 0) — Non-blocking
 // ─────────────────────────────────────────────
 void ultrasonicTask(void* param) {
   pinMode(TRIG_PIN, OUTPUT);
@@ -112,47 +101,19 @@ void ultrasonicTask(void* param) {
 }
 
 // ─────────────────────────────────────────────
-// Send state to Render.com server → browser
+// Send state telemetry to Render.com server
 // ─────────────────────────────────────────────
 void sendState() {
   if (!webSocket.isConnected()) return;
 
   JsonDocument doc;
-  doc["type"]            = "state";
-  doc["pump_state"]      = pumpState;
-  doc["pump_auto_mode"]  = pumpAutoMode;
-  doc["servo_angle"]     = servoAngle;
-  doc["water_distance"]  = waterDistanceCm;
-  doc["water_height"]    = waterHeightCm;
-  doc["water_percentage"]= waterPercentage;
-  doc["ir_detected"]     = irDetected;
-
-  JsonArray la = doc["lights"].to<JsonArray>();
-  for (int i = 0; i < 5; i++) la.add(lightStates[i]);
-
-  JsonObject gate = doc["gate"].to<JsonObject>();
-  gate["pos"]    = servoAngle;
-  gate["status"] = (servoAngle > 10) ? "OPEN" : "CLOSED";
-
-  JsonObject pump = doc["pump"].to<JsonObject>();
-  pump["on"]   = pumpState;
-  pump["mode"] = pumpAutoMode ? "AUTO" : "MANUAL";
-
-  JsonObject water = doc["water"].to<JsonObject>();
-  water["distance"] = waterDistanceCm;
-  water["level"]    = waterPercentage;
-  water["height"]   = waterHeightCm;
-
-  JsonObject ir = doc["ir"].to<JsonObject>();
-  ir["val"]    = irDetected ? 1 : 0;
-  ir["status"] = irDetected ? "warning" : "safe";
-
-  JsonObject settings = doc["settings"].to<JsonObject>();
-  settings["waterDepth"]    = waterDepth;
-  settings["waterOffset"]   = waterOffset;
-  settings["lowThreshold"]  = lowThreshold;
-  settings["highThreshold"] = highThreshold;
-  settings["systemName"]    = "Smart Home";
+  doc["type"]         = "state";
+  doc["levelPercent"] = waterPercentage;
+  doc["distanceCm"]   = waterDistanceCm;
+  doc["pumpOn"]       = pumpState;
+  doc["mode"]         = pumpAutoMode ? "AUTO" : "MANUAL";
+  doc["online"]       = true;
+  doc["rssi"]         = WiFi.RSSI();
 
   String out;
   serializeJson(doc, out);
@@ -160,46 +121,37 @@ void sendState() {
 }
 
 // ─────────────────────────────────────────────
-// LCD Update
+// LCD Display Update
 // ─────────────────────────────────────────────
 void updateLCD() {
   if (!hasLCD) return;
   lcd.setCursor(0, 0);
   lcd.print("Water:");
-  lcd.print(waterPercentage);
-  lcd.print("%       ");
+  lcd.print(waterPercentage, 1);
+  lcd.print("%     ");
   lcd.setCursor(0, 1);
   lcd.print(pumpAutoMode ? "AUTO " : "MANU ");
   lcd.print(pumpState ? "PUMP:ON " : "PUMP:OFF");
 }
 
 // ─────────────────────────────────────────────
-// Read sensors
+// Sensor Reading
 // ─────────────────────────────────────────────
 void readSensors() {
-  // Ultrasonic from Core 0 task
   xSemaphoreTake(ultraMutex, portMAX_DELAY);
   float d = smoothedDistance;
   xSemaphoreGive(ultraMutex);
-  if (d > 1.0f) {
-    waterDistanceCm = (int)d;
-    waterHeightCm   = max(0, waterDepth - waterDistanceCm + waterOffset);
-    waterPercentage = (int)constrain(map(waterHeightCm, 0, waterDepth, 0, 100), 0, 100);
-  }
 
-  // IR sensor (debounced)
-  static uint8_t irCount = 0;
-  if (digitalRead(IR_PIN) == LOW) { if (irCount < 5) irCount++; }
-  else                            { if (irCount > 0) irCount--; }
-  bool curIr = (irCount >= 5);
-  if (curIr && !irDetected) irDetectTimeSec = millis() / 1000;
-  irDetected = curIr;
+  if (d > 1.0f) {
+    waterDistanceCm = d;
+    waterPercentage = toPercent(d);
+  }
 
   updateLCD();
 }
 
 // ─────────────────────────────────────────────
-// WebSocket event handler
+// WebSocket Event Handler
 // ─────────────────────────────────────────────
 void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
@@ -210,8 +162,7 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 
     case WStype_CONNECTED:
       Serial.println("[WS] Connected to Render.com ✓");
-      // Identify as ESP32 device
-      webSocket.sendTXT("{\"type\":\"device_hello\",\"device\":\"smarthome-esp32\"}");
+      webSocket.sendTXT("{\"type\":\"device_hello\",\"device\":\"jdt-water-tank\"}");
       sendState();
       break;
 
@@ -219,89 +170,42 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
       JsonDocument doc;
       if (deserializeJson(doc, payload, length)) break;
 
-      String action = doc.containsKey("type")   ? doc["type"].as<String>()
-                    : doc.containsKey("action")  ? doc["action"].as<String>()
-                    : "";
+      String typeStr = doc.containsKey("type")   ? doc["type"].as<String>()
+                     : doc.containsKey("action") ? doc["action"].as<String>()
+                     : "";
 
-      if (action == "ping") {
+      if (typeStr == "ping") {
         webSocket.sendTXT("{\"type\":\"pong\"}");
         break;
       }
 
-      if (action == "light") {
-        int  idx   = doc.containsKey("id")    ? (int)doc["id"]
-                   : doc.containsKey("index") ? (int)doc["index"] : -1;
-        bool state = doc.containsKey("state") ? doc["state"].as<bool>()
-                   : doc.containsKey("on")    ? doc["on"].as<bool>() : false;
-        if (idx >= 0 && idx < 5) {
-          lightStates[idx] = state;
-          digitalWrite(RELAY_LIGHTS[idx], state ? LOW : HIGH);
-          yield();
-          Serial.printf("Relay %d → %s\n", idx + 1, state ? "ON" : "OFF");
-        }
-
-      } else if (action == "servo" || action == "servo2") {
-        servo2Angle = constrain((int)doc["angle"], 0, 180);
-        servo2.write(servo2Angle);
-        Serial.printf("Servo2 → %d°\n", servo2Angle);
-
-      } else if (action == "gate") {
-        String cmd = doc.containsKey("cmd")      ? doc["cmd"].as<String>()
-                   : doc.containsKey("command")  ? doc["command"].as<String>() : "";
-        int pos    = doc.containsKey("pos")       ? (int)doc["pos"]
-                   : doc.containsKey("position")  ? (int)doc["position"] : -1;
-
-        if (cmd == "open" || pos == 100) {
-          servoAngle = 180; gateServo.write(180);
-          gateAutoCloseTime = millis() + 8000;
-          Serial.println("Gate → OPEN (auto-close 8s)");
-        } else if (cmd == "close" || pos == 0) {
-          servoAngle = 0; gateServo.write(0);
-          gateAutoCloseTime = 0;
-          Serial.println("Gate → CLOSED");
-        } else if (pos >= 0 && pos <= 100) {
-          servoAngle = map(pos, 0, 100, 0, 180);
-          gateServo.write(servoAngle);
-          gateAutoCloseTime = 0;
-        }
-
-      } else if (action == "pump" || action == "pump_mode" || action == "pump_toggle") {
+      if (typeStr == "control" || typeStr == "pump" || typeStr == "pump_mode") {
+        // 1. Mode Change (AUTO vs MANUAL)
         if (doc.containsKey("mode")) {
           String m = doc["mode"].as<String>();
-          pumpAutoMode = (m == "AUTO" || m == "auto" || m.equalsIgnoreCase("AUTO"));
-          prefs.putBool("pumpAuto", pumpAutoMode);
-          Serial.printf("Pump mode → %s\n", pumpAutoMode ? "AUTO" : "MANUAL");
-        }
-        if (doc.containsKey("state") && doc["state"].is<String>()) {
-          String s = doc["state"].as<String>();
-          if (s.equalsIgnoreCase("AUTO")) {
-            pumpAutoMode = true;
-            prefs.putBool("pumpAuto", true);
-          } else if (s.equalsIgnoreCase("MANUAL")) {
-            pumpAutoMode = false;
-            prefs.putBool("pumpAuto", false);
-          }
-        }
-        if (!pumpAutoMode) {
-          if (doc.containsKey("state") && doc["state"].is<bool>()) {
-            pumpState = doc["state"].as<bool>();
-            digitalWrite(RELAY_PUMP, pumpState ? LOW : HIGH);
-            Serial.printf("Pump relay → %s [MANUAL]\n", pumpState ? "ON" : "OFF");
-          } else if (doc.containsKey("on") && doc["on"].is<bool>()) {
-            pumpState = doc["on"].as<bool>();
-            digitalWrite(RELAY_PUMP, pumpState ? LOW : HIGH);
-            Serial.printf("Pump relay → %s [MANUAL]\n", pumpState ? "ON" : "OFF");
+          bool newAuto = (m.equalsIgnoreCase("AUTO"));
+          if (newAuto != pumpAutoMode) {
+            pumpAutoMode = newAuto;
+            prefs.putBool("pumpAuto", pumpAutoMode);
+            Serial.printf("Pump mode -> %s (saved to NVS)\n", pumpAutoMode ? "AUTO" : "MANUAL");
           }
         }
 
-      } else if (action == "settings") {
-        if (doc.containsKey("waterDepth"))    waterDepth    = doc["waterDepth"];
-        if (doc.containsKey("waterOffset"))   waterOffset   = doc["waterOffset"];
-        if (doc.containsKey("lowThreshold"))  lowThreshold  = doc["lowThreshold"];
-        if (doc.containsKey("highThreshold")) highThreshold = doc["highThreshold"];
+        // 2. Manual Relay Control
+        if (doc.containsKey("pumpOn")) {
+          if (!pumpAutoMode) {
+            pumpState = doc["pumpOn"].as<bool>();
+            digitalWrite(RELAY_PUMP, pumpState ? LOW : HIGH);
+            Serial.printf("Pump relay -> %s [MANUAL]\n", pumpState ? "ON" : "OFF");
+          }
+        } else if (doc.containsKey("on") && !pumpAutoMode) {
+          pumpState = doc["on"].as<bool>();
+          digitalWrite(RELAY_PUMP, pumpState ? LOW : HIGH);
+          Serial.printf("Pump relay -> %s [MANUAL]\n", pumpState ? "ON" : "OFF");
+        }
+
+        sendState();
       }
-
-      sendState(); // Always reply with updated state
       break;
     }
 
@@ -315,12 +219,11 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("\n=== Smart Home Remote Boot ===");
+  Serial.println("\n=== JDT Water Tank Controller Boot ===");
 
-  // Load saved settings
+  // Load preferences
   prefs.begin("smarthome", false);
-  pumpAutoMode = true; // Always default to AUTOMATIC mode
-  prefs.putBool("pumpAuto", true);
+  pumpAutoMode = prefs.getBool("pumpAuto", true);
 
   // LCD
   Wire.begin(21, 22);
@@ -329,33 +232,15 @@ void setup() {
   if (Wire.endTransmission() == 0) {
     hasLCD = true;
     lcd.init(); lcd.backlight(); lcd.clear();
-    lcd.print("SmartHome Remote");
+    lcd.print("JDT Water Tank");
     lcd.setCursor(0, 1); lcd.print("Connecting WiFi..");
   }
 
-  // Relays (active LOW — start OFF = HIGH)
-  for (int i = 0; i < 5; i++) {
-    pinMode(RELAY_LIGHTS[i], OUTPUT);
-    digitalWrite(RELAY_LIGHTS[i], HIGH);
-  }
+  // Relay (Active LOW — HIGH = OFF)
   pinMode(RELAY_PUMP, OUTPUT);
   digitalWrite(RELAY_PUMP, HIGH);
 
-  // Motor
-  pinMode(MOTOR_IN1, OUTPUT); digitalWrite(MOTOR_IN1, LOW);
-  pinMode(MOTOR_IN2, OUTPUT); digitalWrite(MOTOR_IN2, LOW);
-
-  // Sensors
-  pinMode(IR_PIN, INPUT);
-
-  // Servos
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  ESP32PWM::allocateTimer(2);
-  gateServo.setPeriodHertz(50); gateServo.attach(SERVO_PIN,  500, 2400); gateServo.write(0);
-  servo2.setPeriodHertz(50);    servo2.attach(SERVO2_PIN, 500, 2400);    servo2.write(0);
-
-  // Ultrasonic task on Core 0
+  // FreeRTOS Ultrasonic Task on Core 0
   ultraMutex = xSemaphoreCreateMutex();
   xTaskCreatePinnedToCore(ultrasonicTask, "Ultrasonic", 2048, NULL, 1, NULL, 0);
   Serial.println("Ultrasonic: Core 0 task started");
@@ -370,67 +255,59 @@ void setup() {
   }
   if (WiFi.status() == WL_CONNECTED) {
     Serial.printf("\nWiFi: Connected! IP = %s\n", WiFi.localIP().toString().c_str());
-    if (hasLCD) { lcd.clear(); lcd.print("WiFi OK"); lcd.setCursor(0,1); lcd.print(WiFi.localIP()); }
+    if (hasLCD) { lcd.clear(); lcd.print("WiFi Connected"); lcd.setCursor(0,1); lcd.print(WiFi.localIP()); }
   } else {
-    Serial.println("\nWiFi: FAILED — will retry in loop");
+    Serial.println("\nWiFi: FAILED — retrying in loop");
   }
 
-  // Connect to Render.com via SSL WebSocket
+  // Connect SSL WebSocket to Render.com
   webSocket.beginSSL(WS_HOST, WS_PORT, WS_PATH);
   webSocket.onEvent(webSocketEvent);
   webSocket.setReconnectInterval(3000);
-  webSocket.enableHeartbeat(15000, 3000, 2);  // Ping every 15s to keep alive
+  webSocket.enableHeartbeat(15000, 3000, 2);
   Serial.printf("WebSocket: Connecting to wss://%s%s\n", WS_HOST, WS_PATH);
 }
 
 // ─────────────────────────────────────────────
-// Main Loop
+// Main Execution Loop
 // ─────────────────────────────────────────────
 void loop() {
   // WiFi watchdog
   if (millis() - lastWifiCheck > 10000) {
     lastWifiCheck = millis();
     if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("WiFi: Lost connection — reconnecting...");
+      Serial.println("WiFi: Reconnecting...");
       WiFi.reconnect();
     }
   }
 
-  // WebSocket handler (MUST call every loop)
+  // WebSocket loop
   webSocket.loop();
 
-  // Auto pump logic — runs every tick, instant relay response
-  if (pumpAutoMode) {
-    if (waterPercentage > 0 && waterPercentage <= lowThreshold && !pumpState) {
-      pumpState = true;
-      digitalWrite(RELAY_PUMP, LOW);
-      Serial.printf("Auto Pump ON  (Water %d%% <= Low %d%%)\n", waterPercentage, lowThreshold);
-      sendState();
-    } else if (waterPercentage >= highThreshold && pumpState) {
-      pumpState = false;
-      digitalWrite(RELAY_PUMP, HIGH);
-      Serial.printf("Auto Pump OFF (Water %d%% >= High %d%%)\n", waterPercentage, highThreshold);
-      sendState();
-    }
-  }
-
-  // Gate auto-close
-  if (gateAutoCloseTime > 0 && millis() > gateAutoCloseTime) {
-    gateAutoCloseTime = 0;
-    servoAngle = 0; gateServo.write(0);
-    sendState();
-    Serial.println("Gate → Auto-Closed (8s timer)");
-  }
-
-  // Read sensors every 500ms
-  if (millis() - lastSensorRead > 500) {
+  // Read sensors every 250ms
+  if (millis() - lastSensorRead >= 250) {
     lastSensorRead = millis();
     readSensors();
-  }
 
-  // Live broadcast every 250ms for smooth water level updates
-  if (millis() - lastBroadcast > 250) {
-    lastBroadcast = millis();
-    sendState();
+    // ── Local Auto Pump Logic ──
+    if (pumpAutoMode) {
+      if (waterPercentage <= AUTO_PUMP_ON && !pumpState) {
+        pumpState = true;
+        digitalWrite(RELAY_PUMP, LOW);  // Active LOW = Relay ON
+        Serial.printf("Auto Pump ON (Water %.1f%% <= %.1f%%)\n", waterPercentage, AUTO_PUMP_ON);
+        sendState();
+      } else if (waterPercentage >= AUTO_PUMP_OFF && pumpState) {
+        pumpState = false;
+        digitalWrite(RELAY_PUMP, HIGH); // Active LOW = Relay OFF
+        Serial.printf("Auto Pump OFF (Water %.1f%% >= %.1f%%)\n", waterPercentage, AUTO_PUMP_OFF);
+        sendState();
+      }
+    }
+
+    // Telemetry broadcast every 250ms
+    if (millis() - lastTelemetryTime >= 250) {
+      lastTelemetryTime = millis();
+      sendState();
+    }
   }
 }
