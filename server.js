@@ -45,12 +45,22 @@ const httpServer = http.createServer((req, res) => {
       // SPA fallback — serve index.html for unknown routes
       fs.readFile(path.join(__dirname, 'public', 'index.html'), (err2, data2) => {
         if (err2) { res.writeHead(404); res.end('Not Found'); return; }
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        });
         res.end(data2);
       });
       return;
     }
-    res.writeHead(200, { 'Content-Type': mime });
+    res.writeHead(200, {
+      'Content-Type': mime,
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
     res.end(data);
   });
 });
