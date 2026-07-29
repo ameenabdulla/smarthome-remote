@@ -1,6 +1,6 @@
 /*
  * ======================================================================================
- * NEXUS SMART HOME REMOTE FIRMWARE — FULL CONTROL (LIGHTS, GATE, SERVO, WATER, SAFETY)
+ * NEXUS SMART HOME REMOTE FIRMWARE — ALWAYS BOOT INTO AUTOMATIC PUMP MODE
  * ESP32 Dev Module connected to WiFi & Render.com WebSocket Server
  * Hardware Map:
  *   - Lights (5 Relays): GPIO 13, 14, 27, 26, 33 (Active-LOW)
@@ -45,10 +45,10 @@ float sensorOffset = 5.0f;
 float autoPumpOn   = 20.0f; // ON when <= 20%
 float autoPumpOff  = 90.0f; // OFF when >= 90%
 
-// States
+// States — ALWAYS DEFAULT TO AUTO MODE = TRUE ON BOOT/POWER ON!
 bool lightStates[5]   = {false, false, false, false, false};
 bool pumpState        = false;
-bool pumpAutoMode     = true;
+bool pumpAutoMode     = true; // ALWAYS AUTOMATIC ON POWER ON
 int  gateServoAngle   = 0;
 int  auxServoAngle    = 0;
 
@@ -90,7 +90,7 @@ void ultrasonicTask(void* param) {
       float d = (dur * 0.0343f) / 2.0f;
       if (d >= 2.0f && d <= 450.0f) {
         xSemaphoreTake(ultraMutex, portMAX_DELAY);
-        smoothedDistance = d;
+        smoothedDistance = d; // 100% instant raw distance
         xSemaphoreGive(ultraMutex);
       }
     }
@@ -167,8 +167,8 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
       break;
 
     case WStype_CONNECTED:
-      Serial.println("[WS] Connected to Render.com ✓");
-      webSocket.sendTXT("{\"type\":\"device_hello\",\"device\":\"nexus-smart-home\"}");
+      Serial.println("[WS] Connected to Render.com ✓ — Setting AUTO mode");
+      pumpAutoMode = true; // Always default to AUTO mode on cloud connection
       sendState();
       break;
 
@@ -217,7 +217,7 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
           String m = doc["mode"].as<String>();
           pumpAutoMode = (m.equalsIgnoreCase("AUTO") || m.equalsIgnoreCase("AUTOMATIC"));
           prefs.putBool("pumpAuto", pumpAutoMode);
-          Serial.printf("[WS] Mode set to %s (Saved to NVS)\n", pumpAutoMode ? "AUTO" : "MANUAL");
+          Serial.printf("[WS] Mode set to %s\n", pumpAutoMode ? "AUTO" : "MANUAL");
         }
         if (doc.containsKey("on") && !pumpAutoMode) {
           pumpState = doc["on"].as<bool>();
@@ -247,8 +247,10 @@ void setup() {
   delay(300);
   Serial.println("\n=== NEXUS SMART HOME CONTROLLER BOOT ===");
 
+  // ALWAYS DEFAULT TO AUTOMATIC PUMP MODE ON POWER ON / REBOOT
   prefs.begin("smarthome", false);
-  pumpAutoMode = prefs.getBool("pumpAuto", true);
+  pumpAutoMode = true; // POWER ON ALWAYS STARTS IN AUTOMATIC MODE!
+  prefs.putBool("pumpAuto", true);
 
   for (int i = 0; i < 5; i++) {
     pinMode(RELAY_LIGHTS[i], OUTPUT);
@@ -256,7 +258,7 @@ void setup() {
   }
 
   pinMode(RELAY_PUMP, OUTPUT);
-  digitalWrite(RELAY_PUMP, HIGH);
+  digitalWrite(RELAY_PUMP, HIGH); // Off on boot
 
   pinMode(IR_SENSOR_PIN, INPUT);
 
@@ -304,20 +306,20 @@ void loop() {
     lastSensorRead = millis();
     readSensors();
 
-    // ── Auto Pump Trigger Logic ──
+    // ── ALWAYS AUTOMATIC PUMP TRIGGERING ──
     if (pumpAutoMode) {
       if (waterPercentage <= autoPumpOn) {
         if (!pumpState) {
           pumpState = true;
           digitalWrite(RELAY_PUMP, LOW);  // Active LOW = Relay ON
-          Serial.printf("[AUTO PUMP] ON (Water %.1f%% <= %.1f%%)\n", waterPercentage, autoPumpOn);
+          Serial.printf("[POWER-ON AUTO PUMP] LOW WATER %.1f%% <= %.1f%% -> PUMP ON\n", waterPercentage, autoPumpOn);
           sendState();
         }
       } else if (waterPercentage >= autoPumpOff) {
         if (pumpState) {
           pumpState = false;
           digitalWrite(RELAY_PUMP, HIGH); // Active LOW = Relay OFF
-          Serial.printf("[AUTO PUMP] OFF (Water %.1f%% >= %.1f%%)\n", waterPercentage, autoPumpOff);
+          Serial.printf("[POWER-ON AUTO PUMP] HIGH WATER %.1f%% >= %.1f%% -> PUMP OFF\n", waterPercentage, autoPumpOff);
           sendState();
         }
       }
