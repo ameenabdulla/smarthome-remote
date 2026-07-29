@@ -68,11 +68,19 @@ float getRawDistance() {
   digitalWrite(TRIG_PIN, LOW);  delayMicroseconds(2);
   digitalWrite(TRIG_PIN, HIGH); delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
-  long duration = pulseIn(ECHO_PIN, HIGH, 8000); // 8ms non-blocking
+  
+  // 30ms timeout allows up to ~5 meters range. 8ms was too short for empty tanks!
+  long duration = pulseIn(ECHO_PIN, HIGH, 30000); 
   if (duration > 0) {
     float dist = (duration * 0.0343f) / 2.0f;
     if (dist >= 2.0f && dist <= 450.0f) return dist;
   }
+  
+  // If timeout (0), assume max distance (empty tank) so pump turns ON
+  if (duration == 0) {
+    return tankDepthCm; 
+  }
+  
   return waterDistanceCm;
 }
 
