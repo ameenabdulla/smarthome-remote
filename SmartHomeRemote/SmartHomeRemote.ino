@@ -267,19 +267,27 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 
       } else if (action == "pump" || action == "pump_mode" || action == "pump_toggle") {
         if (doc.containsKey("mode")) {
-          bool newAuto = doc["mode"].as<String>().equalsIgnoreCase("AUTO");
-          if (newAuto != pumpAutoMode) {
-            pumpAutoMode = newAuto;
-            prefs.putBool("pumpAuto", pumpAutoMode);
-            Serial.printf("Pump mode → %s\n", pumpAutoMode ? "AUTO" : "MANUAL");
+          String m = doc["mode"].as<String>();
+          pumpAutoMode = (m == "AUTO" || m == "auto" || m.equalsIgnoreCase("AUTO"));
+          prefs.putBool("pumpAuto", pumpAutoMode);
+          Serial.printf("Pump mode → %s\n", pumpAutoMode ? "AUTO" : "MANUAL");
+        }
+        if (doc.containsKey("state") && doc["state"].is<String>()) {
+          String s = doc["state"].as<String>();
+          if (s.equalsIgnoreCase("AUTO")) {
+            pumpAutoMode = true;
+            prefs.putBool("pumpAuto", true);
+          } else if (s.equalsIgnoreCase("MANUAL")) {
+            pumpAutoMode = false;
+            prefs.putBool("pumpAuto", false);
           }
         }
         if (!pumpAutoMode) {
-          if (doc.containsKey("state")) {
+          if (doc.containsKey("state") && doc["state"].is<bool>()) {
             pumpState = doc["state"].as<bool>();
             digitalWrite(RELAY_PUMP, pumpState ? LOW : HIGH);
             Serial.printf("Pump relay → %s [MANUAL]\n", pumpState ? "ON" : "OFF");
-          } else if (doc.containsKey("on")) {
+          } else if (doc.containsKey("on") && doc["on"].is<bool>()) {
             pumpState = doc["on"].as<bool>();
             digitalWrite(RELAY_PUMP, pumpState ? LOW : HIGH);
             Serial.printf("Pump relay → %s [MANUAL]\n", pumpState ? "ON" : "OFF");

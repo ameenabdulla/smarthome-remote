@@ -818,7 +818,7 @@ window.PumpControl = (function() {
                 const hint = document.querySelector('.wm-pump-hint');
                 if (hint) hint.style.display = '';
                 ActivityTimeline.addEvent('Pump set to AUTO mode (Low -> ON, High -> OFF)', 'pump');
-                if (window.ESP32WS) window.ESP32WS.send({ type: 'pump', action: 'pump', mode: 'auto' });
+                if (window.ESP32WS) window.ESP32WS.send({ type: 'pump_mode', action: 'pump_mode', mode: 'AUTO', state: 'AUTO' });
             });
 
             manualBtn.addEventListener('click', () => {
@@ -831,7 +831,7 @@ window.PumpControl = (function() {
                 const hint = document.querySelector('.wm-pump-hint');
                 if (hint) hint.style.display = 'none';
                 ActivityTimeline.addEvent('Pump set to MANUAL mode', 'pump');
-                if (window.ESP32WS) window.ESP32WS.send({ type: 'pump', action: 'pump', mode: 'manual' });
+                if (window.ESP32WS) window.ESP32WS.send({ type: 'pump_mode', action: 'pump_mode', mode: 'MANUAL', state: 'MANUAL' });
             });
         }
 
@@ -845,34 +845,35 @@ window.PumpControl = (function() {
                 const modeLabel = document.getElementById('pump-mode-label');
                 if (modeLabel) modeLabel.textContent = 'Mode: MANUAL';
                 setOn(nextOn, 'manual');
-                if (window.ESP32WS) window.ESP32WS.send({ type: 'pump', action: 'pump', mode: 'manual', on: nextOn, state: nextOn });
+                if (window.ESP32WS) window.ESP32WS.send({ type: 'pump', action: 'pump', mode: 'MANUAL', on: nextOn, state: nextOn });
             });
         }
     }
 
     function applyServerState(isOn, mode) {
-        if (mode) mode = mode.toLowerCase();
-        if (mode && mode !== state.mode) {
-            state.mode = mode;
-            const autoBtn = document.getElementById('pump-auto-btn');
-            const manualBtn = document.getElementById('pump-manual-btn');
-            const manualControls = document.getElementById('pump-manual-controls');
-            const modeLabel = document.getElementById('pump-mode-label');
-            const hint = document.querySelector('.wm-pump-hint');
-            if (mode === 'auto') {
-                if (autoBtn) autoBtn.classList.add('active');
-                if (manualBtn) manualBtn.classList.remove('active');
-                if (manualControls) manualControls.style.display = 'none';
-                if (modeLabel) modeLabel.textContent = 'Mode: AUTO (Low -> ON, High -> OFF)';
-                if (hint) hint.style.display = '';
-            } else {
-                if (manualBtn) manualBtn.classList.add('active');
-                if (autoBtn) autoBtn.classList.remove('active');
-                if (manualControls) manualControls.style.display = 'flex';
-                if (modeLabel) modeLabel.textContent = 'Mode: MANUAL';
-                if (hint) hint.style.display = 'none';
-            }
+        if (!mode) return;
+        const normMode = String(mode).toLowerCase();
+        state.mode = normMode;
+        const autoBtn = document.getElementById('pump-auto-btn');
+        const manualBtn = document.getElementById('pump-manual-btn');
+        const manualControls = document.getElementById('pump-manual-controls');
+        const modeLabel = document.getElementById('pump-mode-label');
+        const hint = document.querySelector('.wm-pump-hint');
+
+        if (normMode === 'auto') {
+            if (autoBtn) autoBtn.classList.add('active');
+            if (manualBtn) manualBtn.classList.remove('active');
+            if (manualControls) manualControls.style.display = 'none';
+            if (modeLabel) modeLabel.textContent = 'Mode: AUTO (Low -> ON, High -> OFF)';
+            if (hint) hint.style.display = '';
+        } else {
+            if (manualBtn) manualBtn.classList.add('active');
+            if (autoBtn) autoBtn.classList.remove('active');
+            if (manualControls) manualControls.style.display = 'flex';
+            if (modeLabel) modeLabel.textContent = 'Mode: MANUAL (User Switch Control)';
+            if (hint) hint.style.display = 'none';
         }
+
         if (typeof isOn === 'boolean') {
             setOn(isOn, 'ESP32 telemetry');
         }
